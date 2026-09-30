@@ -1,40 +1,274 @@
-name: Build Flutter APK
+import 'package:flutter/material.dart';
 
-on:
-  push:
-    branches:
-      - main
-      - master
-  workflow_dispatch:
+void main() {
+  runApp(const CryptoRadarApp());
+}
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+class CryptoRadarApp extends StatelessWidget {
+  const CryptoRadarApp({super.key});
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'CryptoRadar',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0D0E12),
+        primaryColor: const Color(0xFF00E676),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF00E676),
+          secondary: Color(0xFF2979FF),
+          surface: Color(0xFF181A20),
+        ),
+      ),
+      home: const CryptoMainScreen(),
+    );
+  }
+}
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
+class CryptoMainScreen extends StatefulWidget {
+  const CryptoMainScreen({super.key});
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: true
+  @override
+  State<CryptoMainScreen> createState() => _CryptoMainScreenState();
+}
 
-      - name: Get Dependencies
-        run: flutter pub get
+class _CryptoMainScreenState extends State<CryptoMainScreen> {
+  int _currentIndex = 0;
 
-      - name: Build APK
-        run: flutter build apk --release --no-tree-shake-icons
+  final List<Widget> _screens = [
+    const RadarScreen(),
+    const MarketScreen(),
+    const WatchlistScreen(),
+    const SettingsScreen(),
+  ];
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        backgroundColor: const Color(0xFF181A20),
+        selectedItemColor: const Color(0xFF00E676),
+        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.radar),
+            label: 'الرادار',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.show_chart),
+            label: 'الأسواق',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.star_outline),
+            label: 'المراقبة',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'الإعدادات',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class RadarScreen extends StatelessWidget {
+  const RadarScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('رادار الانفجارات السعرية 🚀'),
+        backgroundColor: const Color(0xFF181A20),
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildRadarCard(
+            context,
+            symbol: 'BTC/USDT',
+            name: 'Bitcoin',
+            price: '\$91,420.00',
+            change: '+5.4%',
+            isPositive: true,
+            status: 'انفجار وشيك (Squeeze)',
+            signalColor: Colors.amber,
+          ),
+          _buildRadarCard(
+            context,
+            symbol: 'ETH/USDT',
+            name: 'Ethereum',
+            price: '\$3,380.50',
+            change: '+3.1%',
+            isPositive: true,
+            status: 'اختراق مقاومة EMA 200',
+            signalColor: const Color(0xFF00E676),
+          ),
+          _buildRadarCard(
+            context,
+            symbol: 'SOL/USDT',
+            name: 'Solana',
+            price: '\$188.20',
+            change: '-1.2%',
+            isPositive: false,
+            status: 'تدفق سيولة حيتان (MFI > 80)',
+            signalColor: const Color(0xFF2979FF),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRadarCard(
+    BuildContext context, {
+    required String symbol,
+    required String name,
+    required String price,
+    required String change,
+    required bool isPositive,
+    required String status,
+    required Color signalColor,
+  }) {
+    return Card(
+      color: const Color(0xFF181A20),
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: signalColor.withOpacity(0.2),
+                      child: Icon(Icons.currency_bitcoin, color: signalColor),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAlignment.start,
+                      children: [
+                        Text(symbol,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(name,
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAlignment.end,
+                  children: [
+                    Text(price,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(
+                      change,
+                      style: TextStyle(
+                        color: isPositive
+                            ? const Color(0xFF00E676)
+                            : Colors.redAccent,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const Divider(height: 24, color: Colors.white10),
+            Row(
+              children: [
+                Icon(Icons.bolt, size: 16, color: signalColor),
+                const SizedBox(width: 6),
+                Text(
+                  status,
+                  style: TextStyle(
+                      color: signalColor, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MarketScreen extends StatelessWidget {
+  const MarketScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('أسواق العملات الرقمية'),
+        backgroundColor: const Color(0xFF181A20),
+      ),
+      body: const Center(
+        child: Text('قائمة الأسعار والتحليل المباشر',
+            style: TextStyle(color: Colors.grey)),
+      ),
+    );
+  }
+}
+
+class WatchlistScreen extends StatelessWidget {
+  const WatchlistScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('قائمة المراقبة والتنبيهات'),
+        backgroundColor: const Color(0xFF181A20),
+      ),
+      body: const Center(
+        child: Text('لا توجد تنبيهات مضافة حتى الآن',
+            style: TextStyle(color: Colors.grey)),
+      ),
+    );
+  }
+}
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الإعدادات'),
+        backgroundColor: const Color(0xFF181A20),
+      ),
+      body: ListView(
+        children: const [
+          ListTile(
+            leading: Icon(Icons.notifications_active, color: Color(0xFF00E676)),
+            title: Text('التنبيهات اللحظية'),
+            subtitle: Text('تفعيل الإشعارات عند الانفجار السعري'),
+          ),
+          ListTile(
+            leading: Icon(Icons.security, color: Color(0xFF2979FF)),
+            title: Text('مفتاح Gemini AI'),
+            subtitle: Text('تم الربط بالذكاء الاصطناعي بنجاح'),
+          ),
+        ],
+      ),
+    );
+  }
+}

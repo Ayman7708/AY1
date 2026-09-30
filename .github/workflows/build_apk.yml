@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Flutter APK
 
 on:
   push:
@@ -13,20 +13,26 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up JDK 17
+    - name: Set up Java
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew || true
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.19.6'
+        channel: 'stable'
 
-    - name: Build APK with Gradle
-      run: ./gradlew assembleDebug --no-daemon
+    - name: Install dependencies
+      run: flutter pub get
+
+    - name: Build APK
+      run: flutter build apk --debug --no-tree-shake-icons
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: CryptoRadar-APK
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: build/app/outputs/flutter-apk/app-debug.apk

@@ -24,10 +24,12 @@ jobs:
         flutter-version: '3.19.6'
         channel: 'stable'
 
-    - name: Create Android folder & local.properties
+    - name: Auto-generate Clean Android Scaffold
       run: |
-        mkdir -p android
-        echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+        rm -rf android
+        flutter create . --platforms=android --org=com.example --project-name=crypto_app
+        echo "android.useAndroidX=true" >> android/gradle.properties
+        echo "android.enableJetifier=true" >> android/gradle.properties
 
     - name: Get dependencies
       run: flutter pub get

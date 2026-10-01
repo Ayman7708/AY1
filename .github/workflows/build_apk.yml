@@ -35,7 +35,7 @@ jobs:
 
     - name: Re-create Android Scaffold
       run: |
-        flutter create . --platforms=android --org=com.example --project-name=crypto_app --force
+        flutter create . --platforms=android --org=com.example --project-name=crypto_app
         echo "android.useAndroidX=true" >> android/gradle.properties
         echo "android.enableJetifier=true" >> android/gradle.properties
 

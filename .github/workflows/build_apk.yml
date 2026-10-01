@@ -24,22 +24,20 @@ jobs:
         flutter-version: '3.19.6'
         channel: 'stable'
 
-    - name: Auto-generate Clean Android Scaffold
+    - name: Clean and Recreate Android Environment
       run: |
         rm -rf android
         flutter create . --platforms=android --org=com.example --project-name=crypto_app
+        
+        # إضافة إعدادات التوافق الأساسية
         echo "android.useAndroidX=true" >> android/gradle.properties
         echo "android.enableJetifier=true" >> android/gradle.properties
-        
-        # تعديل مستويات SDK لضمان نجاح التجميع مع أي مكونات مستخدمة
-        sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
-        sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
 
-    - name: Get dependencies
+    - name: Get Dependencies
       run: flutter pub get
 
-    - name: Build APK
-      run: flutter build apk --debug --no-tree-shake-icons
+    - name: Build APK with Detailed Logs
+      run: flutter build apk --debug --no-tree-shake-icons --verbose
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

@@ -5,17 +5,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const CryptoRadarApp());
+  runApp(const Ayman7708App());
 }
 
-class CryptoRadarApp extends StatelessWidget {
-  const CryptoRadarApp({super.key});
+class Ayman7708App extends StatelessWidget {
+  const Ayman7708App({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CryptoRadar Pro',
+      title: 'Ayman7708',
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -177,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             Icon(Icons.candlestick_chart, color: Colors.cyanAccent),
             SizedBox(width: 8),
-            Text('CryptoRadar Pro', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('Ayman7708', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
           ],
         ),
         actions: [
@@ -482,7 +482,6 @@ class CoinDetailScreen extends StatefulWidget {
 class _CoinDetailScreenState extends State<CoinDetailScreen> {
   String _selectedTimeframe = '15m';
 
-  // توليد شموع يابانية تفاعلية ديناميكية بحسب الفريم المختار
   List<CandleData> _generateTimeframeCandles(List<dynamic> rawSparkline, String tf) {
     if (rawSparkline.isEmpty) return [];
 
@@ -550,7 +549,6 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            // أزرار الفريمات الزمنية السلسة والمباشرة
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: ['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) {
@@ -567,7 +565,6 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-            // الشرت التفاعلي المباشر بالشموع اليابانية
             Container(
               height: 240,
               width: double.infinity,

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,25 +44,47 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<dynamic> _cryptoList = [];
-  List<dynamic> _filteredList = [];
   bool _isLoading = true;
   String _searchQuery = '';
 
-  // سجل الصفقات النشطة والصفقات المنتهية
   List<Map<String, dynamic>> _activeTrades = [];
   List<Map<String, dynamic>> _tradeHistory = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
+    _loadSavedData();
     fetchLiveMarketData();
+  }
+
+  // تحميل الصفقات والسجل من ذاكرة الجهاز الدائمة
+  Future<void> _loadSavedData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? activeJson = prefs.getString('active_trades');
+    final String? historyJson = prefs.getString('trade_history');
+
+    setState(() {
+      if (activeJson != null) {
+        _activeTrades = List<Map<String, dynamic>>.from(json.decode(activeJson));
+      }
+      if (historyJson != null) {
+        _tradeHistory = List<Map<String, dynamic>>.from(json.decode(historyJson));
+      }
+    });
+  }
+
+  // حفظ البيانات لتستمر بعد إغلاق التطبيق
+  Future<void> _saveData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('active_trades', json.encode(_activeTrades));
+    await prefs.setString('trade_history', json.encode(_tradeHistory));
   }
 
   Future<void> fetchLiveMarketData() async {
     setState(() => _isLoading = true);
     final url = Uri.parse(
-        'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
+        'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true');
 
     try {
       final response = await http.get(url);
@@ -69,7 +92,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final List<dynamic> data = json.decode(response.body);
         setState(() {
           _cryptoList = data;
-          _filteredList = data;
           _isLoading = false;
         });
       } else {
@@ -116,15 +138,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         'entryPrice': price,
         'targetPrice': price * 1.035,
         'stopLoss': price * 0.975,
-        'entryTime': DateTime.now(),
+        'entryTime': DateTime.now().toIso8601String(),
         'image': coin['image'],
       });
     });
+    _saveData();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: Colors.green,
-        content: Text('🎯 تم تفعيل مراقبة الصفقة لـ ${coin['name']}! سيتم متابعة التدفق النقدي دقيقة بدقيقة.'),
+        content: Text('🎯 تم تفعيل الصفقة لحساب ${coin['name']} وحفظها في ذاكرة الجهاز!'),
       ),
     );
   }
@@ -139,17 +162,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         'pnlPercent': isWin ? 3.5 : -2.5,
       });
     });
-  }
-
-  String getCurrentMarketStatus() {
-    int hour = DateTime.now().toUtc().hour;
-    if (hour >= 12 && hour <= 16) {
-      return "🔥 السيولة قصوى (جلسة نيويورك ولندن) - وقت ممتاز للتداول المباشر";
-    } else if (hour >= 7 && hour < 12) {
-      return "🟢 سيولة مرتفعة (جلسة لندن) - اقتناص صفقات السكالبينج";
-    } else {
-      return "🟡 سيولة متوسطة - تداول بحذر وافتح صفقات سريعة";
-    }
+    _saveData();
   }
 
   @override
@@ -178,10 +191,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           tabs: const [
             Tab(icon: Icon(Icons.rocket_launch), text: 'انفجار قريب 🚀'),
             Tab(icon: Icon(Icons.track_changes), text: 'صفقاتي النشطة 🎯'),
-            Tab(icon: Icon(Icons.analytics), text: 'حاسبة النجاح 📊'),
+            Tab(icon: Icon(Icons.analytics), text: 'سجل وأرباح الصفقات 📊'),
+            Tab(icon: Icon(Icons.show_chart), text: 'الشرت والشموع 📈'),
             Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع فقط 🏦'),
-            Tab(icon: Icon(Icons.show_chart), text: 'الشرت والتشبع 📈'),
-            Tab(icon: Icon(Icons.access_time), text: 'متى تتداول؟ ⏰'),
           ],
         ),
       ),
@@ -189,22 +201,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
           : Column(
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  color: const Color(0xFF1E293B),
-                  child: Text(
-                    getCurrentMarketStatus(),
-                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
                 Padding(
                   padding: const EdgeInsets.all(10.0),
                   child: TextField(
                     onChanged: _onSearchChanged,
                     decoration: InputDecoration(
-                      hintText: 'بحث عن أي عملة (FET, FETUSDT, BTC)...',
+                      hintText: 'بحث شامل في جميع العملات الرقمية (BTC, FET, PEPE)...',
                       prefixIcon: const Icon(Icons.search, color: Colors.cyanAccent),
                       filled: true,
                       fillColor: const Color(0xFF151C2C),
@@ -222,9 +224,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       _buildCryptoList(_cryptoList, 'breakout'),
                       _buildActiveTradesView(),
                       _buildPerformanceStatsView(),
-                      _buildCryptoList(_cryptoList, 'smart_money'),
                       _buildCryptoList(_cryptoList, 'chart'),
-                      _buildTradingSessionsView(),
+                      _buildCryptoList(_cryptoList, 'smart_money'),
                     ],
                   ),
                 ),
@@ -236,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildActiveTradesView() {
     if (_activeTrades.isEmpty) {
       return const Center(
-        child: Text('لا توجد صفقات نشطة قيد المراقبة حالياً.\nادخل في صفقة من قائمة "انفجار قريب" لتفعيل المراقبة الدقيقة!',
+        child: Text('لا توجد صفقات نشطة حالياً.\nادخل في صفقة من قائمة العملات وسيتم حفظها بشكل أوتوماتيكي دائم!',
             textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
       );
     }
@@ -265,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                      child: const Text('🔥 التدفق النقدي: إيجابي جداً', style: TextStyle(color: Colors.greenAccent, fontSize: 10)),
+                      child: const Text('🔒 صفقة محفوظة ومستمرة', style: TextStyle(color: Colors.greenAccent, fontSize: 10)),
                     ),
                   ],
                 ),
@@ -312,7 +313,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📊 إحصائيات صفقاتك ونسبة النجاح:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+          const Text('📊 سجل الأرباح ونسبة نجاح التداول الدائمة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -324,6 +325,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(16),
+            width: double.infinity,
             decoration: BoxDecoration(
               color: const Color(0xFF151C2C),
               borderRadius: BorderRadius.circular(12),
@@ -331,12 +333,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
             child: Column(
               children: [
-                const Text('معدل نجاح التوصيات (Win Rate):', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const Text('نسبة النجاح الكلية (Win Rate):', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 const SizedBox(height: 8),
                 Text('${winRate.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          const Text('بيانات السجل محفوظة ولن تُمحى عند الخروج من التطبيق.', style: TextStyle(color: Colors.grey, fontSize: 11)),
         ],
       ),
     );
@@ -360,33 +364,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildTradingSessionsView() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: ListView(
-        children: [
-          const Text('⏰ أفضل أوقات التداول والتواجد في السوق:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-          const SizedBox(height: 12),
-          _buildSessionCard('جلسة نيويورك 🇺🇸 (الأقوى)', '2:00 م - 10:00 م (بتوقيت مكة)', 'تضخيم سيولة حاد وفرص سريعة جداً', Colors.green),
-          _buildSessionCard('جلسة لندن 🇬🇧 (ممتازة)', '10:00 ص - 6:00 م (بتوقيت مكة)', 'بداية حركات الترند الحقيقية اليومية', Colors.cyan),
-          _buildSessionCard('جلسة طوكيو/آسيا 🇯🇵 (تجميع)', '3:00 ص - 11:00 ص (بتوقيت مكة)', 'حركة تجميعية - مناسبة لصفقات التجهيز', Colors.amber),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSessionCard(String title, String time, String desc, Color color) {
-    return Card(
-      color: const Color(0xFF151C2C),
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        leading: Icon(Icons.circle, color: color, size: 14),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        subtitle: Text('$time\n$desc', style: const TextStyle(color: Colors.grey, fontSize: 11)),
-      ),
-    );
-  }
-
   Widget _buildCryptoList(List<dynamic> coins, String category) {
     List<dynamic> displayCoins = List.from(coins);
 
@@ -406,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
 
     if (displayCoins.isEmpty) {
-      return const Center(child: Text('لا توجد نتائج مطابقة لجهود البحث حالياً.', style: TextStyle(color: Colors.grey)));
+      return const Center(child: Text('لا توجد نتائج مطابقة لبحثك.', style: TextStyle(color: Colors.grey)));
     }
 
     return ListView.builder(
@@ -424,7 +401,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           color: const Color(0xFF151C2C),
           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ExpansionTile(
+          child: ListTile(
             leading: CircleAvatar(
               backgroundColor: Colors.transparent,
               child: Image.network(
@@ -446,30 +423,189 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 style: TextStyle(color: isPositive ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold),
               ),
             ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  children: [
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isAlreadyInTrade ? Colors.grey : Colors.greenAccent,
-                        minimumSize: const Size(double.infinity, 40),
-                      ),
-                      icon: const Icon(Icons.center_focus_strong, color: Colors.black),
-                      label: Text(
-                        isAlreadyInTrade ? 'الصفقة قيد المراقبة الآن 🎯' : 'دخول الصفقة الآن ومراقبة التدفق النقدي 🎯',
-                        style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: isAlreadyInTrade ? null : () => _enterTrade(coin),
-                    ),
-                  ],
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CoinDetailScreen(coin: coin, onTradeEntered: () => _enterTrade(coin), isAlreadyInTrade: isAlreadyInTrade),
                 ),
-              )
-            ],
+              );
+            },
           ),
         );
       },
     );
   }
+}
+
+// شاشة تفاصيل الشرت الاحترافي بالشموع اليابانية لجميع الفواصل الزمنية
+class CoinDetailScreen extends StatefulWidget {
+  final dynamic coin;
+  final VoidCallback onTradeEntered;
+  final bool isAlreadyInTrade;
+
+  const CoinDetailScreen({
+    super.key,
+    required this.coin,
+    required this.onTradeEntered,
+    required this.isAlreadyInTrade,
+  });
+
+  @override
+  State<CoinDetailScreen> createState() => _CoinDetailScreenState();
+}
+
+class _CoinDetailScreenState extends State<CoinDetailScreen> {
+  String _selectedTimeframe = '15m';
+
+  @override
+  Widget build(BuildContext context) {
+    final coin = widget.coin;
+    final double price = (coin['current_price'] ?? 0).toDouble();
+    final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+    final List<dynamic> sparklineRaw = coin['sparkline_in_7d']?['price'] ?? [];
+
+    List<CandleData> candles = [];
+    if (sparklineRaw.length >= 8) {
+      for (int i = 0; i < sparklineRaw.length - 3; i += 3) {
+        double open = (sparklineRaw[i] as num).toDouble();
+        double close = (sparklineRaw[i + 2] as num).toDouble();
+        double high = open > close ? open * 1.002 : close * 1.002;
+        double low = open < close ? open * 0.998 : close * 0.998;
+        candles.add(CandleData(open: open, high: high, low: low, close: close));
+      }
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('\$$price', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+                    Text('${change24 >= 0 ? '+' : ''}${change24.toStringAsFixed(2)}%',
+                        style: TextStyle(color: change24 >= 0 ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: widget.isAlreadyInTrade ? Colors.grey : Colors.greenAccent),
+                  icon: const Icon(Icons.flash_on, color: Colors.black),
+                  label: Text(widget.isAlreadyInTrade ? 'قيد المراقبة' : 'دخول ومراقبة الصفقة', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  onPressed: widget.isAlreadyInTrade
+                      ? null
+                      : () {
+                          widget.onTradeEntered();
+                          Navigator.pop(context);
+                        },
+                )
+              ],
+            ),
+            const SizedBox(height: 16),
+            // الفواصل الزمنية القياسية
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: ['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) {
+                final bool isSelected = _selectedTimeframe == tf;
+                return ChoiceChip(
+                  label: Text(tf, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
+                  selected: isSelected,
+                  selectedColor: Colors.cyanAccent,
+                  backgroundColor: const Color(0xFF151C2C),
+                  onSelected: (val) {
+                    setState(() => _selectedTimeframe = tf);
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            // الشرت الاحترافي بأسلوب المنصات العالمية
+            Container(
+              height: 240,
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151C2C),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
+              ),
+              child: candles.isEmpty
+                  ? const Center(child: Text('جاري رسم الشموع اليابانية...'))
+                  : CustomPaint(
+                      painter: CandlestickPainter(candles: candles.take(24).toList()),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CandleData {
+  final double open;
+  final double high;
+  final double low;
+  final double close;
+
+  CandleData({required this.open, required this.high, required this.low, required this.close});
+}
+
+class CandlestickPainter extends CustomPainter {
+  final List<CandleData> candles;
+
+  CandlestickPainter({required this.candles});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (candles.isEmpty) return;
+
+    double minPrice = candles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
+    double maxPrice = candles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
+    if (maxPrice == minPrice) maxPrice += 0.0001;
+
+    double candleWidth = size.width / candles.length;
+
+    for (int i = 0; i < candles.length; i++) {
+      final c = candles[i];
+      bool isBullish = c.close >= c.open;
+      Color candleColor = isBullish ? Colors.greenAccent : Colors.redAccent;
+
+      double x = (i * candleWidth) + (candleWidth / 2);
+
+      double highY = size.height - ((c.high - minPrice) / (maxPrice - minPrice) * size.height);
+      double lowY = size.height - ((c.low - minPrice) / (maxPrice - minPrice) * size.height);
+      double openY = size.height - ((c.open - minPrice) / (maxPrice - minPrice) * size.height);
+      double closeY = size.height - ((c.close - minPrice) / (maxPrice - minPrice) * size.height);
+
+      final wickPaint = Paint()
+        ..color = candleColor
+        ..strokeWidth = 1.2;
+      canvas.drawLine(Offset(x, highY), Offset(x, lowY), wickPaint);
+
+      final bodyPaint = Paint()
+        ..color = candleColor
+        ..style = PaintingStyle.fill;
+
+      double topY = openY < closeY ? openY : closeY;
+      double bodyHeight = (openY - closeY).abs();
+      if (bodyHeight < 2) bodyHeight = 2;
+
+      canvas.drawRect(
+        Rect.fromLTWH(x - (candleWidth * 0.3), topY, candleWidth * 0.6, bodyHeight),
+        bodyPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

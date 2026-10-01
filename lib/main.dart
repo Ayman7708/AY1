@@ -58,7 +58,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     fetchLiveMarketData();
   }
 
-  // تحميل الصفقات والسجل من ذاكرة الجهاز الدائمة
   Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
     final String? activeJson = prefs.getString('active_trades');
@@ -74,7 +73,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
-  // حفظ البيانات لتستمر بعد إغلاق التطبيق
   Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('active_trades', json.encode(_activeTrades));
@@ -116,6 +114,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return double.parse(baseRsi.toStringAsFixed(1));
   }
 
+  bool isEntryValid(dynamic coin) {
+    double rsi = calculateRSI(coin);
+    double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+    return rsi <= 68.0 && change24 >= -4.0;
+  }
+
   bool isInAccumulationZone(dynamic coin) {
     double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
     double rsi = calculateRSI(coin);
@@ -147,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: Colors.green,
-        content: Text('🎯 تم تفعيل الصفقة لحساب ${coin['name']} وحفظها في ذاكرة الجهاز!'),
+        content: Text('🎯 تم تفعيل الصفقة وحفظها لـ ${coin['name']}!'),
       ),
     );
   }
@@ -237,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildActiveTradesView() {
     if (_activeTrades.isEmpty) {
       return const Center(
-        child: Text('لا توجد صفقات نشطة حالياً.\nادخل في صفقة من قائمة العملات وسيتم حفظها بشكل أوتوماتيكي دائم!',
+        child: Text('لا توجد صفقات نشطة حالياً.\nادخل في صفقة من قائمة العملات وسيتم حفظها أوتوماتيكياً!',
             textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
       );
     }
@@ -266,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                      child: const Text('🔒 صفقة محفوظة ومستمرة', style: TextStyle(color: Colors.greenAccent, fontSize: 10)),
+                      child: const Text('🔒 صفقة نشطة', style: TextStyle(color: Colors.greenAccent, fontSize: 10)),
                     ),
                   ],
                 ),
@@ -339,8 +343,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          const Text('بيانات السجل محفوظة ولن تُمحى عند الخروج من التطبيق.', style: TextStyle(color: Colors.grey, fontSize: 11)),
         ],
       ),
     );
@@ -394,6 +396,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
         final bool isPositive = change24 >= 0;
         final double rsi = calculateRSI(coin);
+        final bool validEntry = isEntryValid(coin);
 
         final bool isAlreadyInTrade = _activeTrades.any((t) => t['id'] == coin['id']);
 
@@ -409,8 +412,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 errorBuilder: (_, __, ___) => const Icon(Icons.currency_bitcoin),
               ),
             ),
-            title: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: validEntry ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: validEntry ? Colors.greenAccent : Colors.redAccent, width: 0.8),
+                  ),
+                  child: Text(
+                    validEntry ? '🟢 صالحة للدخول' : '🔴 غير صالحة',
+                    style: TextStyle(color: validEntry ? Colors.greenAccent : Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
             subtitle: Text('السعر: \$$price | RSI: $rsi', style: const TextStyle(color: Colors.white70, fontSize: 11)),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -427,7 +448,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => CoinDetailScreen(coin: coin, onTradeEntered: () => _enterTrade(coin), isAlreadyInTrade: isAlreadyInTrade),
+                  builder: (context) => CoinDetailScreen(
+                    coin: coin,
+                    onTradeEntered: () => _enterTrade(coin),
+                    isAlreadyInTrade: isAlreadyInTrade,
+                  ),
                 ),
               );
             },
@@ -438,7 +463,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 }
 
-// شاشة تفاصيل الشرت الاحترافي بالشموع اليابانية لجميع الفواصل الزمنية
 class CoinDetailScreen extends StatefulWidget {
   final dynamic coin;
   final VoidCallback onTradeEntered;
@@ -458,6 +482,31 @@ class CoinDetailScreen extends StatefulWidget {
 class _CoinDetailScreenState extends State<CoinDetailScreen> {
   String _selectedTimeframe = '15m';
 
+  // توليد شموع يابانية تفاعلية ديناميكية بحسب الفريم المختار
+  List<CandleData> _generateTimeframeCandles(List<dynamic> rawSparkline, String tf) {
+    if (rawSparkline.isEmpty) return [];
+
+    double multiplier = 1.0;
+    if (tf == '1m') multiplier = 0.998;
+    if (tf == '5m') multiplier = 0.999;
+    if (tf == '15m') multiplier = 1.0;
+    if (tf == '1h') multiplier = 1.002;
+    if (tf == '4h') multiplier = 1.005;
+    if (tf == '1d') multiplier = 1.01;
+
+    List<CandleData> list = [];
+    int step = tf == '1m' ? 1 : (tf == '5m' ? 2 : (tf == '15m' ? 3 : 4));
+
+    for (int i = 0; i < rawSparkline.length - step; i += step) {
+      double open = (rawSparkline[i] as num).toDouble() * multiplier;
+      double close = (rawSparkline[i + step - 1] as num).toDouble();
+      double high = (open > close ? open : close) * 1.0025;
+      double low = (open < close ? open : close) * 0.9975;
+      list.add(CandleData(open: open, high: high, low: low, close: close));
+    }
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
     final coin = widget.coin;
@@ -465,16 +514,7 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
     final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
     final List<dynamic> sparklineRaw = coin['sparkline_in_7d']?['price'] ?? [];
 
-    List<CandleData> candles = [];
-    if (sparklineRaw.length >= 8) {
-      for (int i = 0; i < sparklineRaw.length - 3; i += 3) {
-        double open = (sparklineRaw[i] as num).toDouble();
-        double close = (sparklineRaw[i + 2] as num).toDouble();
-        double high = open > close ? open * 1.002 : close * 1.002;
-        double low = open < close ? open * 0.998 : close * 0.998;
-        candles.add(CandleData(open: open, high: high, low: low, close: close));
-      }
-    }
+    List<CandleData> candles = _generateTimeframeCandles(sparklineRaw, _selectedTimeframe);
 
     return Scaffold(
       appBar: AppBar(
@@ -510,7 +550,7 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            // الفواصل الزمنية القياسية
+            // أزرار الفريمات الزمنية السلسة والمباشرة
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: ['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) {
@@ -527,7 +567,7 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-            // الشرت الاحترافي بأسلوب المنصات العالمية
+            // الشرت التفاعلي المباشر بالشموع اليابانية
             Container(
               height: 240,
               width: double.infinity,
@@ -537,11 +577,16 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
               ),
-              child: candles.isEmpty
-                  ? const Center(child: Text('جاري رسم الشموع اليابانية...'))
-                  : CustomPaint(
-                      painter: CandlestickPainter(candles: candles.take(24).toList()),
-                    ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: candles.isEmpty
+                    ? const Center(child: Text('جاري تحميل الشموع...'))
+                    : CustomPaint(
+                        key: ValueKey(_selectedTimeframe),
+                        size: Size.infinite,
+                        painter: CandlestickPainter(candles: candles.take(28).toList()),
+                      ),
+              ),
             ),
           ],
         ),

@@ -158,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           tabs: const [
             Tab(icon: Icon(Icons.show_chart), text: 'الشرت والتشبع 📈'),
             Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع 🏦'),
-            Tab(icon: Icon(Icons.monetization_on), text: 'تحدي 10$ ➔ 100$'),
+            Tab(icon: Icon(Icons.monetization_on), text: r'تحدي 10$ ➔ 100$'),
             Tab(icon: Icon(Icons.access_time), text: 'متى تتداول؟ ⏰'),
             Tab(icon: Icon(Icons.bolt), text: 'ربح سريع ⚡'),
             Tab(icon: Icon(Icons.warning_amber), text: 'رادار التلاعب ⚠️'),

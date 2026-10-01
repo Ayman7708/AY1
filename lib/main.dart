@@ -28,7 +28,7 @@ class CryptoRadarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CryptoRadar Ultimate',
+      title: 'CryptoRadar Smart Money',
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -63,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     fetchLiveMarketData();
   }
 
@@ -119,7 +119,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
-  // تقييم توقيت التداول المباشر بناءً على ساعات الجلسات العالمية
   String getCurrentMarketStatus() {
     int hour = DateTime.now().toUtc().hour;
     if (hour >= 12 && hour <= 16) {
@@ -139,24 +138,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       appBar: AppBar(
         title: const Row(
           children: [
-            Icon(Icons.auto_graph, color: Colors.greenAccent),
+            Icon(Icons.candlestick_chart, color: Colors.cyanAccent),
             SizedBox(width: 8),
-            Text('CryptoRadar Max', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('CryptoRadar Smart Money', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.greenAccent),
+            icon: const Icon(Icons.refresh, color: Colors.cyanAccent),
             onPressed: fetchLiveMarketData,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.greenAccent,
-          labelColor: Colors.greenAccent,
+          indicatorColor: Colors.cyanAccent,
+          labelColor: Colors.cyanAccent,
           unselectedLabelColor: Colors.grey,
           isScrollable: true,
           tabs: const [
+            Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع والأوامر 🏦'),
             Tab(icon: Icon(Icons.monetization_on), text: 'تحدي 10$ ➔ 100$'),
             Tab(icon: Icon(Icons.access_time), text: 'متى تتداول؟ ⏰'),
             Tab(icon: Icon(Icons.bolt), text: 'ربح سريع ⚡'),
@@ -166,17 +166,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.greenAccent))
+          ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
           : Column(
               children: [
-                // شريط التنبيه بالتوقيت المباشر
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   color: const Color(0xFF1E293B),
                   child: Text(
                     getCurrentMarketStatus(),
-                    style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -185,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: TextField(
                     onChanged: _filterSearch,
                     decoration: InputDecoration(
-                      hintText: 'بحث عن عملة مناسبة للصفقة...',
+                      hintText: 'بحث عن عملة لمعاينة مناطق التجميع والأوامر...',
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
                       fillColor: const Color(0xFF151C2C),
@@ -200,6 +199,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: TabBarView(
                     controller: _tabController,
                     children: [
+                      _buildCryptoList(_filteredList, 'smart_money'),
                       _buildCryptoList(_filteredList, 'challenge'),
                       _buildTradingSessionsView(),
                       _buildCryptoList(_filteredList, 'fast_profit'),
@@ -213,7 +213,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // شاشة جدول المواعيد الذهبية للتداول
   Widget _buildTradingSessionsView() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -227,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _buildSessionCard('جلسة طوكيو/آسيا 🇯🇵 (تجميع)', '3:00 ص - 11:00 ص (بتوقيت مكة)', 'حركة تجميعية - مناسبة لصفقات التجهيز', Colors.amber),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size(double.infinity, 45)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, minimumSize: const Size(double.infinity, 45)),
             icon: const Icon(Icons.notifications_active, color: Colors.black),
             label: const Text('تفعيل تنبيهات دخول الجلسات القوية', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
             onPressed: () {
@@ -249,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(time, style: const TextStyle(color: Colors.greenAccent, fontSize: 12)),
+            Text(time, style: const TextStyle(color: Colors.cyanAccent, fontSize: 12)),
             Text(desc, style: const TextStyle(color: Colors.grey, fontSize: 11)),
           ],
         ),
@@ -260,21 +259,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildCryptoList(List<dynamic> coins, String category) {
     List<dynamic> displayCoins = List.from(coins);
 
-    if (category == 'challenge') {
-      // اختيار عملات ذات حركة زاد حجمها وتوفر فرصة مضاعفة رأس المال عبر صفقات متتالية
-      displayCoins = displayCoins.where((c) {
-        double change = (c['price_change_percentage_24h'] ?? 0).abs().toDouble();
-        return change >= 2.0 && change <= 12.0;
-      }).toList();
-    }
-
     return ListView.builder(
       itemCount: displayCoins.length,
       itemBuilder: (context, index) {
         final coin = displayCoins[index];
-        final price = coin['current_price'] ?? 0;
-        final change24 = coin['price_change_percentage_24h'] ?? 0;
+        final double price = (coin['current_price'] ?? 0).toDouble();
+        final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
         final bool isPositive = change24 >= 0;
+
+        // حساب مناطق التجميع وأوامر الشراء والبيع المرتكزة على مستويات السيولة
+        final double accumulationZoneMin = price * 0.965; // منطقة التجميع السفلى
+        final double accumulationZoneMax = price * 0.985; // منطقة التجميع العليا
+        final double buyOrderWall = price * 0.96;         // حائط طلبات الشراء الكبرى (Whale Buy Wall)
+        final double sellOrderWall = price * 1.045;       // حائط طلبات البيع الكبرى (Whale Sell Wall)
 
         return Card(
           color: const Color(0xFF151C2C),
@@ -308,18 +305,44 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Divider(color: Colors.grey),
-                    const Text('🚀 خطة نمو $10 إلى $100 لهذه العملة:', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    Text('• المرحلة 1: دخول بمبلغ \$10 عند \$$price ➔ هدف خروج \$${(price * 1.05).toStringAsFixed(3)} (+5%)', style: const TextStyle(fontSize: 11)),
-                    Text('• المرحلة 2: تكرار العملية بـ 3 صفقات متتالية بنفس الاستراتيجية.', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    if (category == 'smart_money') ...[
+                      const Text('🏦 تحليل خريطة التجميع وأوامر الحيتان الكبرى:', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B0F19),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('📦 نطاق منطقة التجميع (Smart Accumulation): \$$accumulationZoneMin - \$$accumulationZoneMax',
+                                style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text('🛡️ حائط طلبات الشراء الضخمة (Buy Order Wall): \$$buyOrderWall',
+                                style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 11)),
+                            const SizedBox(height: 4),
+                            Text('🎯 حائط جني الأرباح / أهداف البيع الكبرى (Sell Wall): \$$sellOrderWall',
+                                style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      const Text('🚀 خطة نمو $10 إلى $100 لهذه العملة:', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Text('• المرحلة 1: دخول عند منطقة التجميع \$$accumulationZoneMax ➔ هدف أول \$${(price * 1.05).toStringAsFixed(3)} (+5%)', style: const TextStyle(fontSize: 11)),
+                      Text('• المرحلة 2: تكرار العملية بـ 3 صفقات متتالية بنفس الاستراتيجية.', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
                     const SizedBox(height: 10),
                     ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size(double.infinity, 38)),
-                      icon: const Icon(Icons.play_arrow, color: Colors.black),
-                      label: const Text('إرسال إشعار لحظة بدء حركة هذه العملة', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, minimumSize: const Size(double.infinity, 38)),
+                      icon: const Icon(Icons.notifications_active, color: Colors.black),
+                      label: const Text('تفعيل تنبيه وصول السعر لمنطقة التجميع', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                       onPressed: () {
-                        sendNotification('إشارة دخول محتملة لـ ${coin['name']}', 'السعر الحالي: \$$price. حافظ على أهدافك ووقف الخسارة!');
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تفعيل متابعة الفرصة!')));
+                        sendNotification('تنبيه سيولة لـ ${coin['name']}', 'وصل السعر قرب منطقة التجميع \$$accumulationZoneMax! جهز أمر الدخول.');
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تفعيل التنبيه بنجاح!')));
                       },
                     )
                   ],

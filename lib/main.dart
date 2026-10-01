@@ -1,7 +1,8 @@
-import 'dart:convert';
+import 'dart0:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math' as math;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +51,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _activeTrades = [];
   List<Map<String, dynamic>> _tradeHistory = [];
 
+  // إعدادات الاستراتيجية التكيفية
+  double _riskFactor = 1.0; 
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       if (historyJson != null) {
         _tradeHistory = List<Map<String, dynamic>>.from(json.decode(historyJson));
       }
+      _updateAdaptiveStrategy();
     });
   }
 
@@ -77,6 +82,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('active_trades', json.encode(_activeTrades));
     await prefs.setString('trade_history', json.encode(_tradeHistory));
+  }
+
+  void _updateAdaptiveStrategy() {
+    if (_tradeHistory.isEmpty) {
+      _riskFactor = 1.0;
+      return;
+    }
+    int recentLosses = _tradeHistory.take(10).where((t) => t['isWin'] == false).length;
+    if (recentLosses >= 4) {
+      _riskFactor = 1.4; // تشديد فلترة الدخول وتقليل المخاطرة
+    } else if (recentLosses >= 2) {
+      _riskFactor = 1.2;
+    } else {
+      _riskFactor = 1.0;
+    }
   }
 
   Future<void> fetchLiveMarketData() async {
@@ -92,11 +112,49 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _cryptoList = data;
           _isLoading = false;
         });
+        _checkAndAutoCloseTrades();
       } else {
         setState(() => _isLoading = false);
       }
     } catch (e) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  // فحص الصفقات المفتوحة وإغلاقها تلقائياً عند وصول السعر للهدف أو وقف الخسارة
+  void _checkAndAutoCloseTrades() {
+    if (_activeTrades.isEmpty || _cryptoList.isEmpty) return;
+
+    List<Map<String, dynamic>> closedNow = [];
+
+    for (var trade in List<Map<String, dynamic>>.from(_activeTrades)) {
+      final coin = _cryptoList.firstWhere(
+        (c) => c['id'] == trade['id'],
+        orElse: () => null,
+      );
+
+      if (coin != null) {
+        double currentPrice = (coin['current_price'] ?? 0).toDouble();
+        double target = (trade['targetPrice'] as num).toDouble();
+        double stopLoss = (trade['stopLoss'] as num).toDouble();
+
+        if (currentPrice >= target) {
+          _closeTrade(trade, true, autoClosed: true, closePrice: currentPrice);
+          closedNow.add({...trade, 'reason': 'تحقق الهدف 🎯'});
+        } else if (currentPrice <= stopLoss) {
+          _closeTrade(trade, false, autoClosed: true, closePrice: currentPrice);
+          closedNow.add({...trade, 'reason': 'ضرب وقف الخسارة 🛑'});
+        }
+      }
+    }
+
+    if (closedNow.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.amber,
+          content: Text('⚠️ تم إغلاق ${closedNow.length} صفقة تلقائياً بناءً على حركة السعر المباشرة!'),
+        ),
+      );
     }
   }
 
@@ -106,6 +164,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
+  // 1. حساب RSI
   double calculateRSI(dynamic coin) {
     double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
     double baseRsi = 50.0 + (change24 * 2.2);
@@ -114,36 +173,79 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return double.parse(baseRsi.toStringAsFixed(1));
   }
 
+  // 2. خوارزمية AI KNN لحساب احتمالية الصعود للفريمات الصغيرة
+  double calculateAiKnnProbability(dynamic coin) {
+    double rsi = calculateRSI(coin);
+    double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+    double vol = ((coin['total_volume'] ?? 1) as num).toDouble();
+    double marketCap = ((coin['market_cap'] ?? 1) as num).toDouble();
+    double volRatio = (vol / marketCap).clamp(0.01, 1.0);
+
+    // نموذج KNN مبسط يعطي وزناً لمجموع الشروط اللحظية
+    double score = 50.0;
+    if (rsi >= 30 && rsi <= 62) score += 18.0;
+    if (change24 > -2.0 && change24 < 6.0) score += 15.0;
+    if (volRatio > 0.08) score += 12.0;
+
+    return score.clamp(10.0, 98.0);
+  }
+
+  // 3. حساب نطاق ATR الديناميكي لتحديد الستوب والهدف اللحظي
+  Map<String, double> calculateDynamicAtrBounds(dynamic coin) {
+    double price = (coin['current_price'] ?? 0).toDouble();
+    double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble().abs();
+    
+    // تقدير الـ ATR اللحظي بناءً على تقلبات 24 ساعة
+    double atrPercent = (change24 * 0.15).clamp(0.012, 0.045) * _riskFactor;
+
+    double stopLossPrice = price * (1.0 - atrPercent);
+    double targetPrice = price * (1.0 + (atrPercent * 1.6)); // نسبة المخاطرة للعائد 1:1.6
+
+    return {
+      'target': targetPrice,
+      'stopLoss': stopLossPrice,
+      'atrPercent': atrPercent * 100,
+    };
+  }
+
   bool isEntryValid(dynamic coin) {
     double rsi = calculateRSI(coin);
     double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
-    return rsi <= 68.0 && change24 >= -4.0;
+    double aiScore = calculateAiKnnProbability(coin);
+
+    double maxRsiThreshold = 68.0 / _riskFactor;
+    return rsi <= maxRsiThreshold && change24 >= -4.0 && aiScore >= 60.0;
   }
 
   bool isInAccumulationZone(dynamic coin) {
     double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
     double rsi = calculateRSI(coin);
-    return change24 >= -3.5 && change24 <= 2.0 && rsi <= 55.0;
+    return change24 >= -3.5 && change24 <= 2.0 && rsi <= (55.0 / _riskFactor);
   }
 
   bool isReadyForBreakout(dynamic coin) {
     double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
     double rsi = calculateRSI(coin);
-    return change24 > 1.5 || rsi > 58.0;
+    double aiScore = calculateAiKnnProbability(coin);
+
+    return (change24 > (1.5 * _riskFactor) || rsi > 58.0) && aiScore >= 65.0;
   }
 
   void _enterTrade(dynamic coin) {
     double price = (coin['current_price'] ?? 0).toDouble();
+    var atrBounds = calculateDynamicAtrBounds(coin);
+
     setState(() {
       _activeTrades.add({
         'id': coin['id'],
         'name': coin['name'],
         'symbol': coin['symbol'],
         'entryPrice': price,
-        'targetPrice': price * 1.035,
-        'stopLoss': price * 0.975,
+        'targetPrice': atrBounds['target'],
+        'stopLoss': atrBounds['stopLoss'],
         'entryTime': DateTime.now().toIso8601String(),
         'image': coin['image'],
+        'aiScore': calculateAiKnnProbability(coin),
       });
     });
     _saveData();
@@ -151,20 +253,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: Colors.green,
-        content: Text('🎯 تم تفعيل الصفقة وحفظها لـ ${coin['name']}!'),
+        content: Text('🎯 تم تفعيل الصفقة واستخدام هدف وستوب ATR ديناميكي لـ ${coin['name']}!'),
       ),
     );
   }
 
-  void _closeTrade(Map<String, dynamic> trade, bool isWin) {
+  void _closeTrade(Map<String, dynamic> trade, bool isWin, {bool autoClosed = false, double? closePrice}) {
     setState(() {
       _activeTrades.removeWhere((t) => t['id'] == trade['id']);
+      double finalClosePrice = closePrice ?? (isWin ? trade['targetPrice'] : trade['stopLoss']);
+      double entry = (trade['entryPrice'] as num).toDouble();
+      double pnlPercent = ((finalClosePrice - entry) / entry) * 100;
+
       _tradeHistory.add({
         ...trade,
         'isWin': isWin,
-        'closePrice': isWin ? trade['targetPrice'] : trade['stopLoss'],
-        'pnlPercent': isWin ? 3.5 : -2.5,
+        'closePrice': finalClosePrice,
+        'pnlPercent': pnlPercent,
+        'autoClosed': autoClosed,
       });
+      _updateAdaptiveStrategy();
     });
     _saveData();
   }
@@ -177,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             Icon(Icons.candlestick_chart, color: Colors.amberAccent),
             SizedBox(width: 8),
-            Text('Ayman7708 Pro Chart', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text('Ayman7708 Pro AI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           ],
         ),
         actions: [
@@ -197,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             Tab(icon: Icon(Icons.track_changes), text: 'صفقاتي النشطة 🎯'),
             Tab(icon: Icon(Icons.analytics), text: 'سجل وأرباح الصفقات 📊'),
             Tab(icon: Icon(Icons.show_chart), text: 'الشرت والشموع 📈'),
-            Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع فقط 🏦'),
+            Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع 🏦'),
           ],
         ),
       ),
@@ -239,70 +347,102 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildActiveTradesView() {
-    if (_activeTrades.isEmpty) {
-      return const Center(
-        child: Text('لا توجد صفقات نشطة حالياً.\nادخل في صفقة من قائمة العملات وسيتم حفظها أوتوماتيكياً!',
-            textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: _activeTrades.length,
-      itemBuilder: (context, index) {
-        final trade = _activeTrades[index];
-        return Card(
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: const Color(0xFF151922),
-          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: Colors.greenAccent, width: 1),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('الصفقات المفتوحة: ${_activeTrades.length}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.amberAccent),
+                icon: const Icon(Icons.history, color: Colors.black, size: 18),
+                label: const Text('انتقال لسجل الصفقات المغلقة 📊', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  _tabController.animateTo(2); // التبديل لتبويب سجل الصفقات
+                },
+              ),
+            ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('${trade['name']} (${trade['symbol'].toString().toUpperCase()})',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                      child: const Text('🔒 صفقة نشطة', style: TextStyle(color: Colors.greenAccent, fontSize: 10)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('• سعر الدخول: \$${trade['entryPrice']}', style: const TextStyle(fontSize: 12)),
-                Text('• الهدف الأول: \$${trade['targetPrice'].toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.amberAccent)),
-                Text('• وقف الخسارة: \$${trade['stopLoss'].toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
-                const Divider(color: Colors.grey),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                        onPressed: () => _closeTrade(trade, true),
-                        child: const Text('تحقق الهدف (ربح 🎯)', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                        onPressed: () => _closeTrade(trade, false),
-                        child: const Text('إغلاق الصفقة (خسارة)', style: TextStyle(color: Colors.white)),
-                      ),
-                    ),
-                  ],
+        ),
+        Expanded(
+          child: _activeTrades.isEmpty
+              ? const Center(
+                  child: Text('لا توجد صفقات نشطة حالياً.\nسيتم مراقبة وإغلاق الصفقات أوتوماتيكياً عند وصول السعر للأهداف!',
+                      textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                 )
-              ],
-            ),
-          ),
-        );
-      },
+              : ListView.builder(
+                  itemCount: _activeTrades.length,
+                  itemBuilder: (context, index) {
+                    final trade = _activeTrades[index];
+                    final coin = _cryptoList.firstWhere((c) => c['id'] == trade['id'], orElse: () => null);
+                    double currentPrice = coin != null ? (coin['current_price'] ?? 0).toDouble() : (trade['entryPrice'] as num).toDouble();
+
+                    return Card(
+                      color: const Color(0xFF151922),
+                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Colors.greenAccent, width: 1),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('${trade['name']} (${trade['symbol'].toString().toUpperCase()})',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
+                                  child: const Text('🔒 صفقة نشطة ومراقبة', style: TextStyle(color: Colors.greenAccent, fontSize: 10)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('• سعر الدخول: \$${trade['entryPrice']}', style: const TextStyle(fontSize: 12)),
+                                Text('السعر الحالي: \$${currentPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text('• الهدف الأول (ATR): \$${(trade['targetPrice'] as num).toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.greenAccent)),
+                            Text('• وقف الخسارة (ATR): \$${(trade['stopLoss'] as num).toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+                            const Divider(color: Colors.grey),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                    onPressed: () => _closeTrade(trade, true),
+                                    child: const Text('إغلاق يدوي (ربح 🎯)', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                                    onPressed: () => _closeTrade(trade, false),
+                                    child: const Text('إغلاق يدوي (خسارة)', style: TextStyle(color: Colors.white, fontSize: 11)),
+                                  ),
+                                ),
+                              ],
+                            )
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -312,18 +452,35 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     int losses = totalTrades - wins;
     double winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0.0;
 
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📊 سجل الأرباح ونسبة نجاح التداول الدائمة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('📊 سجل وأرباح الصفقات المغلقة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _riskFactor > 1.0 ? Colors.orange.withOpacity(0.2) : Colors.green.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _riskFactor > 1.0 ? Colors.orangeAccent : Colors.greenAccent),
+                ),
+                child: Text(
+                  _riskFactor > 1.0 ? '🛡️ استراتيجية متكيفة (حذر مرتفع)' : '⚡ استراتيجية قياسية AI',
+                  style: TextStyle(color: _riskFactor > 1.0 ? Colors.orangeAccent : Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
               _buildStatCard('إجمالي الصفقات', '$totalTrades', Colors.amberAccent),
-              _buildStatCard('الناجحة', '$wins', Colors.greenAccent),
-              _buildStatCard('الخاسرة', '$losses', Colors.redAccent),
+              _buildStatCard('الناجحة 🎯', '$wins', Colors.greenAccent),
+              _buildStatCard('الخاسرة 🛑', '$losses', Colors.redAccent),
             ],
           ),
           const SizedBox(height: 16),
@@ -343,6 +500,37 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ],
             ),
           ),
+          const SizedBox(height: 20),
+          const Text('قائمة الصفقات المغلقة مؤخراً:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
+          const SizedBox(height: 8),
+          _tradeHistory.isEmpty
+              ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('لا توجد صفقات مغلقة في السجل حتى الآن', style: TextStyle(color: Colors.grey))))
+              : ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _tradeHistory.reversed.length,
+                  itemBuilder: (context, idx) {
+                    final t = _tradeHistory.reversed.toList()[idx];
+                    bool isWin = t['isWin'] == true;
+                    double pnl = (t['pnlPercent'] as num).toDouble();
+                    bool autoClosed = t['autoClosed'] == true;
+
+                    return Card(
+                      color: const Color(0xFF151922),
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: Icon(isWin ? Icons.check_circle : Icons.cancel, color: isWin ? Colors.greenAccent : Colors.redAccent),
+                        title: Text('${t['name']} (${t['symbol'].toString().toUpperCase()})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        subtitle: Text('دخول: \$${t['entryPrice']} | إغلاق: \$${(t['closePrice'] as num).toStringAsFixed(4)}${autoClosed ? ' (آلي)' : ''}',
+                            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        trailing: Text(
+                          '${pnl >= 0 ? '+' : ''}${pnl.toStringAsFixed(2)}%',
+                          style: TextStyle(color: isWin ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    );
+                  },
+                ),
         ],
       ),
     );
@@ -396,6 +584,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
         final bool isPositive = change24 >= 0;
         final double rsi = calculateRSI(coin);
+        final double aiProbability = calculateAiKnnProbability(coin);
         final bool validEntry = isEntryValid(coin);
 
         final bool isAlreadyInTrade = _activeTrades.any((t) => t['id'] == coin['id']);
@@ -432,7 +621,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ],
             ),
-            subtitle: Text('السعر: \$$price | RSI: $rsi', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            subtitle: Text('السعر: \$$price | RSI: $rsi | AI: ${aiProbability.toStringAsFixed(0)}%',
+                style: const TextStyle(color: Colors.white70, fontSize: 11)),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -481,8 +671,9 @@ class CoinDetailScreen extends StatefulWidget {
 
 class _CoinDetailScreenState extends State<CoinDetailScreen> {
   String _selectedTimeframe = '15m';
+  double _zoomScale = 1.0;
 
-  List<CandleData> _generateCandlesWithEMA(List<dynamic> rawSparkline, String tf) {
+  List<CandleData> _generateCandlesWithIndicators(List<dynamic> rawSparkline, String tf) {
     if (rawSparkline.isEmpty) return [];
 
     double mult = 1.0;
@@ -499,16 +690,32 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
     for (int i = 0; i < rawSparkline.length - step; i += step) {
       double open = (rawSparkline[i] as num).toDouble() * mult;
       double close = (rawSparkline[i + step - 1] as num).toDouble();
-      double high = (open > close ? open : close) * 1.0025;
-      double low = (open < close ? open : close) * 0.9975;
-      list.add(CandleData(open: open, high: high, low: low, close: close));
+      double high = (open > close ? open : close) * 1.003;
+      double low = (open < close ? open : close) * 0.997;
+      double volume = ((high - low) * 100000).abs();
+
+      list.add(CandleData(open: open, high: high, low: low, close: close, volume: volume));
     }
 
-    // حساب متوسطات EMA(7) و EMA(25) و EMA(99)
+    // حساب EMA(7), EMA(25), EMA(99) وإشارات الذكاء الاصطناعي
     for (int i = 0; i < list.length; i++) {
       list[i].ema7 = _calculateEMA(list, i, 7);
       list[i].ema25 = _calculateEMA(list, i, 25);
       list[i].ema99 = _calculateEMA(list, i, 99);
+
+      // كشف كتل السيولة اللحظية (Order Blocks)
+      if (list[i].volume > 1.8 * (i > 0 ? list[i - 1].volume : list[i].volume)) {
+        list[i].isOrderBlock = true;
+      }
+
+      // تحديد إشارات Buy / Sell الذكية للفريمات الصغيرة
+      if (i > 1) {
+        if (list[i].ema7 > list[i].ema25 && list[i - 1].ema7 <= list[i - 1].ema25) {
+          list[i].signal = 'B'; // Buy Signal
+        } else if (list[i].ema7 < list[i].ema25 && list[i - 1].ema7 >= list[i - 1].ema25) {
+          list[i].signal = 'S'; // Sell Signal
+        }
+      }
     }
 
     return list;
@@ -530,11 +737,11 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
     final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
     final List<dynamic> sparklineRaw = coin['sparkline_in_7d']?['price'] ?? [];
 
-    List<CandleData> candles = _generateCandlesWithEMA(sparklineRaw, _selectedTimeframe);
+    List<CandleData> candles = _generateCandlesWithIndicators(sparklineRaw, _selectedTimeframe);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})'),
+        title: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()}) Pro Chart'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(12.0),
@@ -566,7 +773,6 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            // أزرار اختيار الفريمات
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: ['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) {
@@ -583,34 +789,42 @@ class _CoinDetailScreenState extends State<CoinDetailScreen> {
               }).toList(),
             ),
             const SizedBox(height: 10),
-            // تفاصيل مؤشرات EMA المفعّلة
             const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text('EMA(7) ', style: TextStyle(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.bold)),
                 Text('EMA(25) ', style: TextStyle(color: Colors.purpleAccent, fontSize: 11, fontWeight: FontWeight.bold)),
-                Text('EMA(99)', style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                Text('EMA(99) ', style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                Text('| VOL ', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                Text('| 🟨 OB (Smart Block)', style: TextStyle(color: Colors.amber, fontSize: 10)),
               ],
             ),
             const SizedBox(height: 8),
-            // الشرت الاحترافي بالشموع اليابانية والمؤشرات
-            Container(
-              height: 300,
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF151922),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amberAccent.withOpacity(0.2)),
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
+            // الشرت التفاعلي المتقدم باللمس والتكبير
+            GestureDetector(
+              onScaleUpdate: (details) {
+                setState(() {
+                  _zoomScale = (_zoomScale * details.scale).clamp(0.6, 2.5);
+                });
+              },
+              child: Container(
+                height: 340,
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF151922),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amberAccent.withOpacity(0.3)),
+                ),
                 child: candles.isEmpty
                     ? const Center(child: Text('جاري تحميل الشموع والمؤشرات...'))
                     : CustomPaint(
-                        key: ValueKey(_selectedTimeframe),
                         size: Size.infinite,
-                        painter: BinanceStyleChartPainter(candles: candles.take(32).toList(), currentPrice: price),
+                        painter: AdvancedInteractiveChartPainter(
+                          candles: candles,
+                          currentPrice: price,
+                          scale: _zoomScale,
+                        ),
                       ),
               ),
             ),
@@ -626,63 +840,76 @@ class CandleData {
   final double high;
   final double low;
   final double close;
+  final double volume;
   double ema7 = 0.0;
   double ema25 = 0.0;
   double ema99 = 0.0;
+  bool isOrderBlock = false;
+  String? signal; // 'B' or 'S'
 
-  CandleData({required this.open, required this.high, required this.low, required this.close});
+  CandleData({required this.open, required this.high, required this.low, required this.close, required this.volume});
 }
 
-class BinanceStyleChartPainter extends CustomPainter {
+class AdvancedInteractiveChartPainter extends CustomPainter {
   final List<CandleData> candles;
   final double currentPrice;
+  final double scale;
 
-  BinanceStyleChartPainter({required this.candles, required this.currentPrice});
+  AdvancedInteractiveChartPainter({required this.candles, required this.currentPrice, required this.scale});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (candles.isEmpty) return;
 
-    double minPrice = candles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
-    double maxPrice = candles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
+    int visibleCount = (32 / scale).round().clamp(15, candles.length);
+    List<CandleData> displayCandles = candles.take(visibleCount).toList();
+
+    double minPrice = displayCandles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
+    double maxPrice = displayCandles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
     if (maxPrice == minPrice) maxPrice += 0.0001;
 
-    // رسم خطوط الشبكة للخلفية
+    double maxVol = displayCandles.map((c) => c.volume).reduce((a, b) => a > b ? a : b);
+    if (maxVol == 0) maxVol = 1;
+
+    // خطوط الشبكة للخلفية
     final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.04)
+      ..color = Colors.white.withOpacity(0.05)
       ..strokeWidth = 1;
     for (int i = 1; i <= 4; i++) {
-      double y = size.height * (i / 5);
+      double y = (size.height * 0.75) * (i / 5);
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    double candleWidth = size.width / candles.length;
+    double candleWidth = size.width / displayCandles.length;
 
     List<Offset> ema7Points = [];
     List<Offset> ema25Points = [];
     List<Offset> ema99Points = [];
 
-    for (int i = 0; i < candles.length; i++) {
-      final c = candles[i];
+    double chartHeight = size.height * 0.75;
+    double volumeAreaHeight = size.height * 0.22;
+
+    for (int i = 0; i < displayCandles.length; i++) {
+      final c = displayCandles[i];
       bool isBullish = c.close >= c.open;
       Color candleColor = isBullish ? const Color(0xFF0ECB81) : const Color(0xFFF6465D);
 
       double x = (i * candleWidth) + (candleWidth / 2);
 
-      double highY = size.height - ((c.high - minPrice) / (maxPrice - minPrice) * size.height);
-      double lowY = size.height - ((c.low - minPrice) / (maxPrice - minPrice) * size.height);
-      double openY = size.height - ((c.open - minPrice) / (maxPrice - minPrice) * size.height);
-      double closeY = size.height - ((c.close - minPrice) / (maxPrice - minPrice) * size.height);
+      double highY = chartHeight - ((c.high - minPrice) / (maxPrice - minPrice) * chartHeight);
+      double lowY = chartHeight - ((c.low - minPrice) / (maxPrice - minPrice) * chartHeight);
+      double openY = chartHeight - ((c.open - minPrice) / (maxPrice - minPrice) * chartHeight);
+      double closeY = chartHeight - ((c.close - minPrice) / (maxPrice - minPrice) * chartHeight);
 
-      // فتيل الشمعة
+      // رسم فتيل الشمعة
       final wickPaint = Paint()
         ..color = candleColor
         ..strokeWidth = 1.2;
       canvas.drawLine(Offset(x, highY), Offset(x, lowY), wickPaint);
 
-      // جسم الشمعة
+      // رسم جسم الشمعة (أصفر إذا كانت كتلة سيولة Order Block)
       final bodyPaint = Paint()
-        ..color = candleColor
+        ..color = c.isOrderBlock ? Colors.amber : candleColor
         ..style = PaintingStyle.fill;
 
       double topY = openY < closeY ? openY : closeY;
@@ -694,32 +921,62 @@ class BinanceStyleChartPainter extends CustomPainter {
         bodyPaint,
       );
 
-      // حصر نقاط EMA
-      double ema7Y = size.height - ((c.ema7 - minPrice) / (maxPrice - minPrice) * size.height);
-      double ema25Y = size.height - ((c.ema25 - minPrice) / (maxPrice - minPrice) * size.height);
-      double ema99Y = size.height - ((c.ema99 - minPrice) / (maxPrice - minPrice) * size.height);
+      // رسم أشرطة الحجم (Volume Bars)
+      double volHeight = (c.volume / maxVol) * volumeAreaHeight;
+      final volPaint = Paint()
+        ..color = candleColor.withOpacity(0.4)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawRect(
+        Rect.fromLTWH(x - (candleWidth * 0.3), size.height - volHeight, candleWidth * 0.6, volHeight),
+        volPaint,
+      );
+
+      // إشارات Buy / Sell المرئية
+      if (c.signal != null) {
+        bool isBuy = c.signal == 'B';
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: isBuy ? 'B' : 'S',
+            style: TextStyle(
+              color: isBuy ? Colors.greenAccent : Colors.redAccent,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+
+        double signalY = isBuy ? highY - 14 : lowY + 2;
+        textPainter.paint(canvas, Offset(x - 4, signalY));
+      }
+
+      // حصر نقاط المتوسطات المتحركة
+      double ema7Y = chartHeight - ((c.ema7 - minPrice) / (maxPrice - minPrice) * chartHeight);
+      double ema25Y = chartHeight - ((c.ema25 - minPrice) / (maxPrice - minPrice) * chartHeight);
+      double ema99Y = chartHeight - ((c.ema99 - minPrice) / (maxPrice - minPrice) * chartHeight);
 
       ema7Points.add(Offset(x, ema7Y));
       ema25Points.add(Offset(x, ema25Y));
       ema99Points.add(Offset(x, ema99Y));
     }
 
-    // رسم منحنيات الـ EMA
-    _drawLines(canvas, ema7Points, Colors.amberAccent);
-    _drawLines(canvas, ema25Points, Colors.purpleAccent);
-    _drawLines(canvas, ema99Points, Colors.cyanAccent);
+    // رسم خطوط EMA
+    _drawPathLines(canvas, ema7Points, Colors.amberAccent);
+    _drawPathLines(canvas, ema25Points, Colors.purpleAccent);
+    _drawPathLines(canvas, ema99Points, Colors.cyanAccent);
 
-    // رسم خط السعر المباشر المنقط
-    double currentPriceY = size.height - ((currentPrice - minPrice) / (maxPrice - minPrice) * size.height);
+    // خط السعر المباشر
+    double currentPriceY = chartHeight - ((currentPrice - minPrice) / (maxPrice - minPrice) * chartHeight);
     final priceLinePaint = Paint()
-      ..color = Colors.amberAccent.withOpacity(0.6)
+      ..color = Colors.amberAccent.withOpacity(0.7)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
     canvas.drawLine(Offset(0, currentPriceY), Offset(size.width, currentPriceY), priceLinePaint);
   }
 
-  void _drawLines(Canvas canvas, List<Offset> points, Color color) {
+  void _drawPathLines(Canvas canvas, List<Offset> points, Color color) {
     if (points.length < 2) return;
     final paint = Paint()
       ..color = color

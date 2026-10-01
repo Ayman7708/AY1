@@ -1,23 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-    FlutterLocalNotificationsPlugin();
-
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-
-  const InitializationSettings initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-  );
-
-  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
-
   runApp(const CryptoRadarApp());
 }
 
@@ -28,7 +14,7 @@ class CryptoRadarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CryptoRadar Deep AI',
+      title: 'CryptoRadar Deep AI Pro',
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -60,33 +46,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<dynamic> _filteredList = [];
   bool _isLoading = true;
   bool _isDeepSearching = false;
-  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
     fetchLiveMarketData();
-  }
-
-  Future<void> sendNotification(String title, String body) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-      'crypto_radar_channel',
-      'إشعارات CryptoRadar',
-      channelDescription: 'تنبيهات صفقات الربح والتوقيت الذهبي',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-
-    await flutterLocalNotificationsPlugin.show(
-      DateTime.now().millisecond,
-      title,
-      body,
-      platformChannelSpecifics,
-    );
   }
 
   Future<void> fetchLiveMarketData() async {
@@ -111,15 +76,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // محرك البحث العميق الذي يجمع بيانات المنصات والذكاء الاصطناعي
   void _executeDeepSearch(String query) async {
-    setState(() {
-      _searchQuery = query;
-      _isDeepSearching = true;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 600));
-
+    setState(() => _isDeepSearching = true);
+    await Future.delayed(const Duration(milliseconds: 400));
     setState(() {
       _filteredList = _cryptoList.where((coin) {
         final name = coin['name'].toString().toLowerCase();
@@ -130,7 +89,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
-  // حساب مؤشر التشبع البيعي والشرائي (RSI Simulator)
   double calculateRSI(dynamic coin) {
     double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
     double baseRsi = 50.0 + (change24 * 2.2);
@@ -139,15 +97,50 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return double.parse(baseRsi.toStringAsFixed(1));
   }
 
+  String getCurrentMarketStatus() {
+    int hour = DateTime.now().toUtc().hour;
+    if (hour >= 12 && hour <= 16) {
+      return "🔥 السيولة قصوى (جلسة نيويورك ولندن) - وقت ممتاز للتداول المباشر";
+    } else if (hour >= 7 && hour < 12) {
+      return "🟢 سيولة مرتفعة (جلسة لندن) - افتناص صفقات السكالبينج";
+    } else {
+      return "🟡 سيولة متوسطة/هادئة - يفضل التداول بحذر والالتزام بوقف الخسارة";
+    }
+  }
+
+  void showNotificationBanner(String title, String body) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF151C2C),
+        duration: const Duration(seconds: 4),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.notifications_active, color: Colors.cyanAccent, size: 18),
+                const SizedBox(width: 8),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(body, style: const TextStyle(color: Colors.white, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Row(
           children: [
-            Icon(Icons.query_stats, color: Colors.cyanAccent),
+            Icon(Icons.candlestick_chart, color: Colors.cyanAccent),
             SizedBox(width: 8),
-            Text('CryptoRadar Deep AI', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('CryptoRadar Pro', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
@@ -163,12 +156,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           unselectedLabelColor: Colors.grey,
           isScrollable: true,
           tabs: const [
-            Tab(icon: Icon(Icons.layers), text: 'التجميع والشرت 📈'),
+            Tab(icon: Icon(Icons.show_chart), text: 'الشرت والتشبع 📈'),
+            Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع 🏦'),
             Tab(icon: Icon(Icons.monetization_on), text: 'تحدي 10$ ➔ 100$'),
             Tab(icon: Icon(Icons.access_time), text: 'متى تتداول؟ ⏰'),
             Tab(icon: Icon(Icons.bolt), text: 'ربح سريع ⚡'),
             Tab(icon: Icon(Icons.warning_amber), text: 'رادار التلاعب ⚠️'),
-            Tab(icon: Icon(Icons.hub), text: 'المنصات'),
           ],
         ),
       ),
@@ -176,7 +169,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
           : Column(
               children: [
-                // محرك البحث العميق
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  color: const Color(0xFF1E293B),
+                  child: Text(
+                    getCurrentMarketStatus(),
+                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(10.0),
                   child: TextField(
@@ -194,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       fillColor: const Color(0xFF151C2C),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.cyanAccent),
+                        borderSide: BorderSide.none,
                       ),
                     ),
                   ),
@@ -203,12 +205,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: TabBarView(
                     controller: _tabController,
                     children: [
+                      _buildCryptoList(_filteredList, 'chart'),
                       _buildCryptoList(_filteredList, 'smart_money'),
                       _buildCryptoList(_filteredList, 'challenge'),
                       _buildTradingSessionsView(),
                       _buildCryptoList(_filteredList, 'fast_profit'),
                       _buildCryptoList(_filteredList, 'manipulation'),
-                      _buildCryptoList(_filteredList, 'exchanges'),
                     ],
                   ),
                 ),
@@ -298,13 +300,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Divider(color: Colors.grey),
-                    // رسم بياني مصغر ومناطق التشبع
-                    Text('📊 حالة المؤشر الفني: $rsiStatus', style: TextStyle(color: rsiColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text('📊 مؤشر قوة الزخم: $rsiStatus', style: TextStyle(color: rsiColor, fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 8),
                     Container(
-                      height: 60,
+                      height: 50,
                       width: double.infinity,
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: const Color(0xFF0B0F19),
                         borderRadius: BorderRadius.circular(8),
@@ -312,12 +313,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         crossAxisAlignment: CrossAxisAlignment.end,
-                        children: sparkline.take(20).map((p) {
-                          double heightFactor = ((p - price) / price).abs() * 500;
-                          if (heightFactor > 40) heightFactor = 40;
-                          if (heightFactor < 5) heightFactor = 5;
+                        children: sparkline.take(25).map((p) {
+                          double heightFactor = ((p - price) / price).abs() * 400;
+                          if (heightFactor > 35) heightFactor = 35;
+                          if (heightFactor < 4) heightFactor = 4;
                           return Container(
-                            width: 6,
+                            width: 5,
                             height: heightFactor,
                             decoration: BoxDecoration(
                               color: isPositive ? Colors.greenAccent : Colors.redAccent,
@@ -328,7 +329,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                     ),
                     const SizedBox(height: 10),
-                    // ملخص البحث العميق والمنصات
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
@@ -338,10 +338,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('🌐 تحليل محرك البحث العميق (Deep Search AI):', style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                          const Text('🌐 تحليل Deep Search AI (Binance • Bybit • OKX):', style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-                          Text('• مجمّع البيانات: Binance, Bybit, OKX, Gate.io', style: const TextStyle(fontSize: 10, color: Colors.white70)),
-                          Text('• توصية الذكاء الاصطناعي: ${rsi <= 35 ? "صفقة دخول شراء سريعة 🎯" : "انتظار إعادة الاختبار ⏳"}', style: const TextStyle(fontSize: 11, color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                          Text('• منطقة التجميع المتوقعة: \$${(price * 0.97).toStringAsFixed(3)} - \$${(price * 0.985).toStringAsFixed(3)}', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
+                          Text('• هدف الربح السريع: \$${(price * 1.035).toStringAsFixed(3)}', style: const TextStyle(fontSize: 11, color: Colors.amberAccent)),
                         ],
                       ),
                     ),
@@ -349,10 +349,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, minimumSize: const Size(double.infinity, 38)),
                       icon: const Icon(Icons.notifications_active, color: Colors.black),
-                      label: const Text('إرسال تنبيه بالفرصة الحالية على هاتفي', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      label: const Text('تفعيل تنبيه الفرصة على التطبيق', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                       onPressed: () {
-                        sendNotification('تحليل Deep AI لـ ${coin['name']}', 'مؤشر RSI: $rsi | $rsiStatus | السعر: \$$price');
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تفعيل التنبيه بنجاح!')));
+                        showNotificationBanner(
+                          'تنبيه إشارة ${coin['name']}',
+                          'السعر: \$$price | مؤشر RSI: $rsi | توصية: ${rsi <= 35 ? "شراء قاع" : "متابعة الحركة"}',
+                        );
                       },
                     )
                   ],

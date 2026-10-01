@@ -14,7 +14,7 @@ class CryptoRadarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CryptoRadar Deep AI Pro',
+      title: 'CryptoRadar AI',
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -78,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _executeDeepSearch(String query) async {
     setState(() => _isDeepSearching = true);
-    await Future.delayed(const Duration(milliseconds: 400));
+    await Future.delayed(const Duration(milliseconds: 300));
     setState(() {
       _filteredList = _cryptoList.where((coin) {
         final name = coin['name'].toString().toLowerCase();
@@ -102,9 +102,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (hour >= 12 && hour <= 16) {
       return "🔥 السيولة قصوى (جلسة نيويورك ولندن) - وقت ممتاز للتداول المباشر";
     } else if (hour >= 7 && hour < 12) {
-      return "🟢 سيولة مرتفعة (جلسة لندن) - افتناص صفقات السكالبينج";
+      return "🟢 سيولة مرتفعة (جلسة لندن) - اقتناص صفقات السكالبينج";
     } else {
-      return "🟡 سيولة متوسطة/هادئة - يفضل التداول بحذر والالتزام بوقف الخسارة";
+      return "🟡 سيولة متوسطة - تداول بحذر وافتح صفقات سريعة";
     }
   }
 
@@ -302,32 +302,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     const Divider(color: Colors.grey),
                     Text('📊 مؤشر قوة الزخم: $rsiStatus', style: TextStyle(color: rsiColor, fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 8),
-                    Container(
-                      height: 50,
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0B0F19),
-                        borderRadius: BorderRadius.circular(8),
+                    if (sparkline.isNotEmpty)
+                      Container(
+                        height: 50,
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B0F19),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: sparkline.take(25).map((p) {
+                            double heightFactor = ((p - price) / price).abs() * 400;
+                            if (heightFactor > 35) heightFactor = 35;
+                            if (heightFactor < 4) heightFactor = 4;
+                            return Container(
+                              width: 5,
+                              height: heightFactor,
+                              decoration: BoxDecoration(
+                                color: isPositive ? Colors.greenAccent : Colors.redAccent,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: sparkline.take(25).map((p) {
-                          double heightFactor = ((p - price) / price).abs() * 400;
-                          if (heightFactor > 35) heightFactor = 35;
-                          if (heightFactor < 4) heightFactor = 4;
-                          return Container(
-                            width: 5,
-                            height: heightFactor,
-                            decoration: BoxDecoration(
-                              color: isPositive ? Colors.greenAccent : Colors.redAccent,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
                     const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.all(10),

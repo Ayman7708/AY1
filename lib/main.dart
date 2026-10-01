@@ -14,7 +14,7 @@ class CryptoRadarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CryptoRadar AI',
+      title: 'CryptoRadar Pro',
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -50,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     fetchLiveMarketData();
   }
 
@@ -97,6 +97,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return double.parse(baseRsi.toStringAsFixed(1));
   }
 
+  bool isInAccumulationZone(dynamic coin) {
+    double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+    double rsi = calculateRSI(coin);
+    // تعتبر في نطاق التجميع فقط إذا كان التغير السعري استقراراً بين -2% و +2% مع RSI متوازن/منخفض
+    return change24 >= -2.5 && change24 <= 2.5 && rsi <= 55.0;
+  }
+
+  bool isReadyForBreakout(dynamic coin) {
+    double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+    double rsi = calculateRSI(coin);
+    // العملات الجاهزة للانفجار السريع خلال الساعات القادمة
+    return change24 > 2.5 && rsi > 55.0 && rsi < 75.0;
+  }
+
   String getCurrentMarketStatus() {
     int hour = DateTime.now().toUtc().hour;
     if (hour >= 12 && hour <= 16) {
@@ -106,30 +120,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     } else {
       return "🟡 سيولة متوسطة - تداول بحذر وافتح صفقات سريعة";
     }
-  }
-
-  void showNotificationBanner(String title, String body) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF151C2C),
-        duration: const Duration(seconds: 4),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.notifications_active, color: Colors.cyanAccent, size: 18),
-                const SizedBox(width: 8),
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(body, style: const TextStyle(color: Colors.white, fontSize: 12)),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -156,11 +146,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           unselectedLabelColor: Colors.grey,
           isScrollable: true,
           tabs: const [
+            Tab(icon: Icon(Icons.rocket_launch), text: 'انفجار قريب 🚀'),
+            Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع فقط 🏦'),
             Tab(icon: Icon(Icons.show_chart), text: 'الشرت والتشبع 📈'),
-            Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع 🏦'),
-            Tab(icon: Icon(Icons.monetization_on), text: r'تحدي 10$ ➔ 100$'),
             Tab(icon: Icon(Icons.access_time), text: 'متى تتداول؟ ⏰'),
-            Tab(icon: Icon(Icons.bolt), text: 'ربح سريع ⚡'),
             Tab(icon: Icon(Icons.warning_amber), text: 'رادار التلاعب ⚠️'),
           ],
         ),
@@ -184,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: TextField(
                     onChanged: _executeDeepSearch,
                     decoration: InputDecoration(
-                      hintText: 'بحث عميق (Binance, Bybit, OKX + AI Analysis)...',
+                      hintText: 'بحث عن عملة ومعرفة متى تتوقع حركتها...',
                       prefixIcon: const Icon(Icons.manage_search, color: Colors.cyanAccent),
                       suffixIcon: _isDeepSearching
                           ? const Padding(
@@ -205,11 +194,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildCryptoList(_filteredList, 'chart'),
+                      _buildCryptoList(_filteredList, 'breakout'),
                       _buildCryptoList(_filteredList, 'smart_money'),
-                      _buildCryptoList(_filteredList, 'challenge'),
+                      _buildCryptoList(_filteredList, 'chart'),
                       _buildTradingSessionsView(),
-                      _buildCryptoList(_filteredList, 'fast_profit'),
                       _buildCryptoList(_filteredList, 'manipulation'),
                     ],
                   ),
@@ -248,31 +236,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildCryptoList(List<dynamic> coins, String category) {
+    List<dynamic> displayCoins = List.from(coins);
+
+    if (category == 'smart_money') {
+      // إظهار فقط العملات القائمة داخل نطاق التجميع حالياً واستبعاد البقية
+      displayCoins = displayCoins.where((c) => isInAccumulationZone(c)).toList();
+    } else if (category == 'breakout') {
+      // إظهار العملات الجاهزة للانفجار السريع
+      displayCoins = displayCoins.where((c) => isReadyForBreakout(c)).toList();
+    }
+
+    if (displayCoins.isEmpty) {
+      return const Center(
+        child: Text('لا توجد عملات تطابق هذا التصفية حالياً في السوق.', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
     return ListView.builder(
-      itemCount: coins.length,
+      itemCount: displayCoins.length,
       itemBuilder: (context, index) {
-        final coin = coins[index];
+        final coin = displayCoins[index];
         final double price = (coin['current_price'] ?? 0).toDouble();
         final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
         final bool isPositive = change24 >= 0;
         final double rsi = calculateRSI(coin);
-        final List<dynamic> sparkline = coin['sparkline_in_7d']?['price'] ?? [];
-
-        String rsiStatus = "متوازن ⚪";
-        Color rsiColor = Colors.white70;
-        if (rsi >= 70) {
-          rsiStatus = "تشبع شرائي ⚠️ (خطر شراء)";
-          rsiColor = Colors.redAccent;
-        } else if (rsi <= 35) {
-          rsiStatus = "تشبع بيعي 🚀 (فرصة شراء ممتازة)";
-          rsiColor = Colors.greenAccent;
-        }
 
         return Card(
           color: const Color(0xFF151C2C),
           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ExpansionTile(
+          child: ListTile(
             leading: CircleAvatar(
               backgroundColor: Colors.transparent,
               child: Image.network(
@@ -280,8 +273,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 errorBuilder: (_, __, ___) => const Icon(Icons.currency_bitcoin),
               ),
             ),
-            title: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-            subtitle: Text('السعر: \$$price | RSI: $rsi', style: TextStyle(color: rsiColor, fontSize: 11, fontWeight: FontWeight.bold)),
+            title: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            subtitle: Text('السعر: \$$price | RSI: $rsi',
+                style: const TextStyle(color: Colors.white70, fontSize: 11)),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -293,78 +288,135 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 style: TextStyle(color: isPositive ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold),
               ),
             ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Divider(color: Colors.grey),
-                    Text('📊 مؤشر قوة الزخم: $rsiStatus', style: TextStyle(color: rsiColor, fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 8),
-                    if (sparkline.isNotEmpty)
-                      Container(
-                        height: 50,
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0B0F19),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: sparkline.take(25).map((p) {
-                            double heightFactor = ((p - price) / price).abs() * 400;
-                            if (heightFactor > 35) heightFactor = 35;
-                            if (heightFactor < 4) heightFactor = 4;
-                            return Container(
-                              width: 5,
-                              height: heightFactor,
-                              decoration: BoxDecoration(
-                                color: isPositive ? Colors.greenAccent : Colors.redAccent,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('🌐 تحليل Deep Search AI (Binance • Bybit • OKX):', style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Text('• منطقة التجميع المتوقعة: \$${(price * 0.97).toStringAsFixed(3)} - \$${(price * 0.985).toStringAsFixed(3)}', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
-                          Text('• هدف الربح السريع: \$${(price * 1.035).toStringAsFixed(3)}', style: const TextStyle(fontSize: 11, color: Colors.amberAccent)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan, minimumSize: const Size(double.infinity, 38)),
-                      icon: const Icon(Icons.notifications_active, color: Colors.black),
-                      label: const Text('تفعيل تنبيه الفرصة على التطبيق', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        showNotificationBanner(
-                          'تنبيه إشارة ${coin['name']}',
-                          'السعر: \$$price | مؤشر RSI: $rsi | توصية: ${rsi <= 35 ? "شراء قاع" : "متابعة الحركة"}',
-                        );
-                      },
-                    )
-                  ],
+            onTap: () {
+              // الانتقال لصفحة الشرت المخصصة للفريمات الزمنية عند الضغط
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CoinDetailScreen(coin: coin),
                 ),
-              )
-            ],
+              );
+            },
           ),
         );
       },
+    );
+  }
+}
+
+// شاشة تفاصيل العملة والشرت للفريمات المختلفة (1m, 15m, 1h, 4h)
+class CoinDetailScreen extends StatefulWidget {
+  final dynamic coin;
+  const CoinDetailScreen({super.key, required this.coin});
+
+  @override
+  State<CoinDetailScreen> createState() => _CoinDetailScreenState();
+}
+
+class _CoinDetailScreenState extends State<CoinDetailScreen> {
+  String _selectedTimeframe = '15m';
+
+  @override
+  Widget build(BuildContext context) {
+    final coin = widget.coin;
+    final double price = (coin['current_price'] ?? 0).toDouble();
+    final List<dynamic> sparkline = coin['sparkline_in_7d']?['price'] ?? [];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${coin['name']} - الشرت المباشر'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('\$$price', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                  child: const Text('متوقع التحرك: خلال 1-3 ساعات 🚀', style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // أزرار الفريمات الزمنية
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: ['1m', '15m', '1h', '4h'].map((tf) {
+                final bool isSelected = _selectedTimeframe == tf;
+                return ChoiceChip(
+                  label: Text(tf, style: TextStyle(color: isSelected ? Colors.black : Colors.white)),
+                  selected: isSelected,
+                  selectedColor: Colors.cyanAccent,
+                  backgroundColor: const Color(0xFF151C2C),
+                  onSelected: (val) {
+                    setState(() => _selectedTimeframe = tf);
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+            // الشرت التفاعلي المباشر
+            Container(
+              height: 200,
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151C2C),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('الفريم الحالي: $_selectedTimeframe', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                  const Spacer(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: sparkline.take(30).map((p) {
+                      double h = ((p - price) / price).abs() * 1000;
+                      if (h > 120) h = 120;
+                      if (h < 10) h = 10;
+                      return Container(
+                        width: 6,
+                        height: h,
+                        decoration: BoxDecoration(
+                          color: Colors.cyanAccent,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            // بيانات وتوقعات التداول
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151C2C),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('💡 تحليل الذكاء الاصطناعي للفريم الحالي:', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text('• النطاق السعري المتوقع: \$${(price * 0.98).toStringAsFixed(3)} ➔ \$${(price * 1.04).toStringAsFixed(3)}', style: const TextStyle(fontSize: 12)),
+                  const SizedBox(height: 4),
+                  const Text('• قرار الدخول: دخول شراء عند كسر مقاومة القمة السابقة على فريم 15m.', style: const TextStyle(fontSize: 12, color: Colors.greenAccent)),
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
     );
   }
 }

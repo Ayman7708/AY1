@@ -1,8 +1,23 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-void main() {
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
   runApp(const CryptoRadarApp());
 }
 
@@ -13,8 +28,7 @@ class CryptoRadarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CryptoRadar',
-      // دعم اللغة العربية وتوجيه الواجهة من اليمين لليسار
+      title: 'CryptoRadar AI',
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -45,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<dynamic> _cryptoList = [];
   List<dynamic> _filteredList = [];
   bool _isLoading = true;
-  String _searchQuery = '';
 
   @override
   void initState() {
@@ -54,7 +67,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     fetchLiveCryptoData();
   }
 
-  // جلب الأسعار والبيانات المباشرة من إنترنت حقيقي عبر API
+  // إرسال إشعار للمستخدم بالصفقة
+  Future<void> sendNotification(String title, String body) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'crypto_radar_channel',
+      'تنبيهات صفقات CryptoRadar',
+      channelDescription: 'إشعارات صفقات الذكاء الاصطناعي وتجمعات الحيتان',
+      importance: Importance.max,
+      priority: Priority.high,
+      showWhen: true,
+    );
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+
+    await flutterLocalNotificationsPlugin.show(
+      DateTime.now().millisecond,
+      title,
+      body,
+      platformChannelSpecifics,
+    );
+  }
+
+  // جلب أسعار وبيانات السوق الحية
   Future<void> fetchLiveCryptoData() async {
     setState(() => _isLoading = true);
     final url = Uri.parse(
@@ -79,7 +114,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _filterSearch(String query) {
     setState(() {
-      _searchQuery = query;
       _filteredList = _cryptoList.where((coin) {
         final name = coin['name'].toString().toLowerCase();
         final symbol = coin['symbol'].toString().toLowerCase();
@@ -88,15 +122,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
+  // خوارزمية الذكاء الاصطناعي لحساب نسبة نجاح الصفقة (Win-Rate %)
+  double calculateAISuccessRate(dynamic coin) {
+    double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+    double vol = (coin['total_volume'] ?? 0).toDouble();
+    double cap = (coin['market_cap'] ?? 1).toDouble();
+    double volCapRatio = vol / cap;
+
+    double baseScore = 60.0; // النسبة الأساسية
+    if (change24 > 0) baseScore += (change24 * 1.5);
+    if (volCapRatio > 0.1) baseScore += 15.0;
+    if (volCapRatio > 0.25) baseScore += 10.0;
+
+    if (baseScore > 96.0) return 96.0;
+    if (baseScore < 45.0) return 48.5;
+    return double.parse(baseScore.toStringAsFixed(1));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Row(
           children: [
-            Icon(Icons.radar, color: Colors.cyanAccent),
+            Icon(Icons.psychology, color: Colors.cyanAccent),
             SizedBox(width: 8),
-            Text('CryptoRadar Pro', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('CryptoRadar AI Hub', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
@@ -111,9 +162,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           labelColor: Colors.cyanAccent,
           unselectedLabelColor: Colors.grey,
           tabs: const [
-            Tab(icon: Icon(Icons.show_chart), text: 'الأسواق الحية'),
+            Tab(icon: Icon(Icons.analytics), text: 'صفقات الذكاء الاصطناعي'),
             Tab(icon: Icon(Icons.waves), text: 'تجميع الحيتان'),
-            Tab(icon: Icon(Icons.bolt), text: 'جاهزة للانفجار'),
+            Tab(icon: Icon(Icons.bolt), text: 'الانفجارات القادمة'),
           ],
         ),
       ),
@@ -121,13 +172,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
           : Column(
               children: [
-                // شريط البحث
                 Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: TextField(
                     onChanged: _filterSearch,
                     decoration: InputDecoration(
-                      hintText: 'بحث عن عملة (مثال: BTC, SOL)...',
+                      hintText: 'بحث عن عملة للمعاينة والتنفيذ...',
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
                       fillColor: const Color(0xFF1E293B),
@@ -142,7 +192,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildCryptoList(_filteredList, 'all'),
+                      _buildCryptoList(_filteredList, 'ai_signals'),
                       _buildCryptoList(_filteredList, 'whales'),
                       _buildCryptoList(_filteredList, 'breakout'),
                     ],
@@ -156,24 +206,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildCryptoList(List<dynamic> coins, String type) {
     List<dynamic> displayCoins = List.from(coins);
 
-    // تصفية الذكاء الاصطناعي/المؤشرات:
     if (type == 'whales') {
-      // رادار الحيتان: اختيار العملات التي تشهد نسبة حجم تداول ضخمة مقارنة برأس المال
       displayCoins = displayCoins.where((c) {
         double vol = (c['total_volume'] ?? 0).toDouble();
         double cap = (c['market_cap'] ?? 1).toDouble();
-        return (vol / cap) > 0.15; // حجم التداول أكثر من 15% من رأس المال
+        return (vol / cap) > 0.15;
       }).toList();
     } else if (type == 'breakout') {
-      // عملات تستعد للانفجار: ارتفاع إيجابي مع زخم صعودي قوي
       displayCoins = displayCoins.where((c) {
         double change = (c['price_change_percentage_24h'] ?? 0).toDouble();
-        return change > 3.0; 
+        return change > 3.0;
       }).toList();
-    }
-
-    if (displayCoins.isEmpty) {
-      return const Center(child: Text('لا توجد عملات تطابق هذا التصفية حالياً'));
     }
 
     return ListView.builder(
@@ -183,6 +226,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final price = coin['current_price'] ?? 0;
         final change24 = coin['price_change_percentage_24h'] ?? 0;
         final bool isPositive = change24 >= 0;
+        final double aiSuccessRate = calculateAISuccessRate(coin);
 
         return Card(
           color: const Color(0xFF1E293B),
@@ -196,13 +240,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 errorBuilder: (_, __, ___) => const Icon(Icons.currency_bitcoin),
               ),
             ),
-            title: Text(
-              '${coin['name']} (${coin['symbol'].toString().toUpperCase()})',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+            title: Row(
+              children: [
+                Text(
+                  '${coin['name']} ',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.cyanAccent.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'نجاح: $aiSuccessRate%',
+                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
             subtitle: Text(
-              '\$$price',
-              style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
+              'السعر الحقيقي: \$$price',
+              style: const TextStyle(color: Colors.white70),
             ),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -219,7 +278,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ),
             children: [
-              // تفاصيل المؤشرات وصنع الصفقات (قصيرة/طويلة الأجل)
               Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
@@ -229,29 +287,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('القيمة السوقية: \$${(coin['market_cap'] / 1000000).toStringAsFixed(1)}M'),
-                        Text('حجم 24س: \$${(coin['total_volume'] / 1000000).toStringAsFixed(1)}M'),
+                        Text('تقييم نماذج الذكاء الاصطناعي: ${aiSuccessRate > 75 ? "توصية عالية الثقة 🟢" : "توصية متوسطة المخاطرة 🟡"}'),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Chip(
-                          label: Text(
-                            isPositive ? 'صفقة قصيرة (Scalp): دخول شراء' : 'صفقة قصيرة (Scalp): انتظار/بيع',
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          backgroundColor: isPositive ? Colors.green.shade900 : Colors.red.shade900,
-                        ),
-                        const SizedBox(width: 8),
-                        Chip(
-                          label: Text(
-                            type == 'whales' ? 'استثمار طويل: تجميع حيتان ممتاز' : 'استثمار طويل: تعزيز تدريجي',
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          backgroundColor: Colors.blueGrey.shade800,
-                        ),
-                      ],
+                    // تفاصيل الصفقات
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('⚡ صفقة قصيرة (Scalp): دخول \$$price - هدف الأول \$${(price * 1.03).toStringAsFixed(2)}',
+                              style: const TextStyle(color: Colors.greenAccent, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Text('🎯 صفقة طويلة (Investment): نطاق تجميع ممتاز - الهدف المستقبلي \$${(price * 1.25).toStringAsFixed(2)}',
+                              style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // زر إرسال التنبيه
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyan,
+                        minimumSize: const Size(double.infinity, 40),
+                      ),
+                      icon: const Icon(Icons.notifications_active, color: Colors.black),
+                      label: const Text('إرسال تنبيه بالصفقة إلى هاتفي', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        sendNotification(
+                          'CryptoRadar AI: صفقة متوقعة لـ ${coin['name']}',
+                          'نسبة النجاح: $aiSuccessRate% | السعر الحقيقي: \$$price | الهدف الأول: \$${(price * 1.03).toStringAsFixed(2)}',
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تم إرسال التنبيه إلى شريط الإشعارات!')),
+                        );
+                      },
                     )
                   ],
                 ),

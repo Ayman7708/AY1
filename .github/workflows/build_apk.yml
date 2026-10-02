@@ -1,4 +1,4 @@
-name: Build Flutter APK
+name: Build Ayman7708 Signed APK
 
 on:
   push:
@@ -10,43 +10,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up Java 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: Set up Java JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
-    - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.19.6'
-        channel: 'stable'
+      - name: Set up Flutter
+        uses: actions/setup-flutter@v2
+        with:
+          flutter-version: '3.19.6'
 
-    - name: Disable Flutter Analytics
-      run: flutter config --no-analytics
+      - name: Get Dependencies
+        run: flutter pub get
 
-    - name: Clean Environment
-      run: |
-        rm -rf android
-        rm -rf .dart_tool
-        flutter clean
+      - name: Build APK Release
+        run: flutter build apk --release --no-tree-shake-icons
 
-    - name: Re-create Android Scaffold
-      run: |
-        flutter create . --platforms=android --org=com.example --project-name=crypto_app
-        echo "android.useAndroidX=true" >> android/gradle.properties
-        echo "android.enableJetifier=true" >> android/gradle.properties
+      - name: Rename APK Output
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/Ayman7708-App.apk
 
-    - name: Get Dependencies
-      run: flutter pub get
-
-    - name: Build APK
-      run: flutter build apk --debug --no-tree-shake-icons
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: CryptoRadar-APK
-        path: build/app/outputs/flutter-apk/app-debug.apk
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: Ayman7708-Official-App
+          path: build/app/outputs/flutter-apk/Ayman7708-App.apk

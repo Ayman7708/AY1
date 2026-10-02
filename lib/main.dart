@@ -50,7 +50,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _activeTrades = [];
   List<Map<String, dynamic>> _tradeHistory = [];
 
+  // معامل التكيف الذكي وإدارة المخاطر
   double _riskFactor = 1.0;
+  int _consecutiveLosses = 0;
 
   @override
   void initState() {
@@ -82,16 +84,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     await prefs.setString('trade_history', json.encode(_tradeHistory));
   }
 
+  // خوارزمية التقييم والتعلم الذاتي من الخسائر المباشرة
   void _updateAdaptiveStrategy() {
     if (_tradeHistory.isEmpty) {
       _riskFactor = 1.0;
+      _consecutiveLosses = 0;
       return;
     }
-    int recentLosses = _tradeHistory.take(10).where((t) => t['isWin'] == false).length;
-    if (recentLosses >= 4) {
-      _riskFactor = 1.4;
-    } else if (recentLosses >= 2) {
-      _riskFactor = 1.2;
+
+    int losses = 0;
+    for (var trade in _tradeHistory.reversed) {
+      if (trade['isWin'] == false) {
+        losses++;
+      } else {
+        break;
+      }
+    }
+
+    _consecutiveLosses = losses;
+
+    if (_consecutiveLosses >= 3) {
+      _riskFactor = 1.5; // تشديد القيود بنسبة 50% لمنع الصفقات العالية المخاطرة
+    } else if (_consecutiveLosses >= 1) {
+      _riskFactor = 1.25;
     } else {
       _riskFactor = 1.0;
     }
@@ -205,7 +220,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     double aiScore = calculateAiKnnProbability(coin);
 
     double maxRsiThreshold = 68.0 / _riskFactor;
-    return rsi <= maxRsiThreshold && change24 >= -4.0 && aiScore >= 60.0;
+    double minAiScore = 60.0 * _riskFactor;
+    return rsi <= maxRsiThreshold && change24 >= -4.0 && aiScore >= minAiScore;
   }
 
   bool isInAccumulationZone(dynamic coin) {
@@ -219,7 +235,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     double rsi = calculateRSI(coin);
     double aiScore = calculateAiKnnProbability(coin);
 
-    return (change24 > (1.5 * _riskFactor) || rsi > 58.0) && aiScore >= 65.0;
+    return (change24 > (1.5 * _riskFactor) || rsi > 58.0) && aiScore >= (65.0 * _riskFactor);
   }
 
   void _enterTrade(dynamic coin, {bool isScalp = false, double leverage = 75.0}) {
@@ -228,9 +244,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     double stopLossPrice;
 
     if (isScalp) {
-      // أهداف سريعة جداً للمضاربة برافعة عالية (أقل من ساعة)
-      targetPrice = price * 1.012; // +1.2% هدف سريع
-      stopLossPrice = price * 0.994; // -0.6% ستوب قريب
+      targetPrice = price * 1.012;
+      stopLossPrice = price * (1.0 - (0.006 * _riskFactor));
     } else {
       var atrBounds = calculateDynamicAtrBounds(coin);
       targetPrice = atrBounds['target']!;
@@ -257,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: Colors.green,
-        content: Text('⚡ تم دخول صفقة سريعة (${leverage.toStringAsFixed(0)}x) لـ ${coin['name']}!'),
+        content: Text('⚡ تم تفعيل الصفقة والتعلم من الاستراتيجية لـ ${coin['name']}!'),
       ),
     );
   }
@@ -278,7 +293,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         'pnlPercent': leveragedPnl,
         'autoClosed': autoClosed,
       });
-      _updateAdaptiveStrategy();
+      _updateAdaptiveStrategy(); // تشغيل خوارزمية التعلم الذاتي فوراً
     });
     _saveData();
   }
@@ -291,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             Icon(Icons.candlestick_chart, color: Colors.amberAccent),
             SizedBox(width: 8),
-            Text('Ayman7708 Ultra Scalp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text('Ayman7708 Self-Learning AI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           ],
         ),
         actions: [
@@ -334,12 +349,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // شاشة الصفقات السريعة (السكالبينج برافعة مالية عالية)
   Widget _buildScalpingView() {
     List<dynamic> scalpCoins = _cryptoList.where((c) {
       double change24 = (c['price_change_percentage_24h'] ?? 0).toDouble();
       double rsi = calculateRSI(c);
-      return change24.abs() >= 1.2 && rsi >= 35.0 && rsi <= 68.0;
+      return change24.abs() >= 1.2 && rsi >= 35.0 && rsi <= (68.0 / _riskFactor);
     }).toList();
 
     return Column(
@@ -352,14 +366,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
-              SizedBox(width: 10),
+              const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '⚡ قسم السكالبينج السريع (المدة: 15-60 دقيقة).\nالرافعات المالية العالية (75x - 125x) تتطلب الالتزام الدقيق بالأهداف ووقف الخسارة الموضح.',
-                  style: TextStyle(fontSize: 11, color: Colors.white70),
+                  '⚡ قسم السكالبينج السريع (المدة: 15-60 دقيقة).\nالمعيار التكيفي الحالي: ${_riskFactor > 1.0 ? 'حذر عالي 🛡️' : 'قياسي ⚡'} (بناءً على نتائج الصفقات).',
+                  style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
               ),
             ],
@@ -373,7 +387,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               final double price = (coin['current_price'] ?? 0).toDouble();
               final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
               final double targetPrice = price * 1.012;
-              final double stopLossPrice = price * 0.994;
+              final double stopLossPrice = price * (1.0 - (0.006 * _riskFactor));
 
               return Card(
                 color: const Color(0xFF151922),
@@ -417,7 +431,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('🎯 الهدف (+1.2%): \$${targetPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
-                          Text('🛑 الستوب (-0.6%): \$${stopLossPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
+                          Text('🛑 الستوب: \$${stopLossPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
                         ],
                       ),
                       const Divider(color: Colors.grey),
@@ -461,6 +475,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // قائمة الصفقات النشطة مع تمييز الصفقات الرابحة
   Widget _buildActiveTradesView() {
     return Column(
       children: [
@@ -474,7 +489,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.amberAccent),
                 icon: const Icon(Icons.history, color: Colors.black, size: 18),
-                label: const Text('انتقال لسجل الصفقات المغلقة 📊', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+                label: const Text('سجل الصفقات المغلقة 📊', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
                 onPressed: () {
                   _tabController.animateTo(4);
                 },
@@ -494,15 +509,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     final trade = _activeTrades[index];
                     final coin = _cryptoList.firstWhere((c) => c['id'] == trade['id'], orElse: () => null);
                     double currentPrice = coin != null ? (coin['current_price'] ?? 0).toDouble() : (trade['entryPrice'] as num).toDouble();
+                    double entryPrice = (trade['entryPrice'] as num).toDouble();
+                    
+                    bool isWin = currentPrice >= entryPrice;
+                    double currentPnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
+
                     bool isScalp = trade['isScalp'] == true;
                     double leverage = ((trade['leverage'] ?? 1.0) as num).toDouble();
+                    double leveragedPnl = currentPnlPercent * leverage;
 
-                    return Card(
-                      color: const Color(0xFF151922),
+                    return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      shape: RoundedRectangleBorder(
+                      decoration: BoxDecoration(
+                        color: isWin ? const Color(0xFF0F291E) : const Color(0xFF151922),
                         borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(color: Colors.greenAccent, width: 1),
+                        border: Border.all(
+                          color: isWin ? Colors.greenAccent : Colors.grey.withOpacity(0.3),
+                          width: isWin ? 1.8 : 1.0,
+                        ),
+                        boxShadow: isWin
+                            ? [
+                                BoxShadow(
+                                  color: Colors.greenAccent.withOpacity(0.2),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                )
+                              ]
+                            : [],
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(12.0),
@@ -516,9 +549,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                                  child: Text(isScalp ? '⚡ سكالبينج ${leverage.toStringAsFixed(0)}x' : '🔒 صفقة قياسية',
-                                      style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  decoration: BoxDecoration(
+                                    color: isWin ? Colors.green.withOpacity(0.3) : Colors.orange.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    isWin
+                                        ? '🟢 ربح حالي (+${leveragedPnl.toStringAsFixed(1)}%)'
+                                        : '📊 قيد المراقبة (${leveragedPnl.toStringAsFixed(1)}%)',
+                                    style: TextStyle(
+                                      color: isWin ? Colors.greenAccent : Colors.orangeAccent,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -526,8 +570,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('• سعر الدخول: \$${trade['entryPrice']}', style: const TextStyle(fontSize: 12)),
-                                Text('السعر الحالي: \$${currentPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                                Text('• سعر الدخول: \$$entryPrice', style: const TextStyle(fontSize: 12)),
+                                Text('السعر الحالي: \$${currentPrice.toStringAsFixed(4)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isWin ? Colors.greenAccent : Colors.amberAccent,
+                                      fontWeight: FontWeight.bold,
+                                    )),
                               ],
                             ),
                             const SizedBox(height: 4),
@@ -587,7 +636,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   border: Border.all(color: _riskFactor > 1.0 ? Colors.orangeAccent : Colors.greenAccent),
                 ),
                 child: Text(
-                  _riskFactor > 1.0 ? '🛡️ استراتيجية متكيفة (حذر مرتفع)' : '⚡ استراتيجية قياسية AI',
+                  _riskFactor > 1.0 ? '🛡️ خوارزمية متعلمة (معامل الحذر ${_riskFactor}x)' : '⚡ استراتيجية قياسية AI',
                   style: TextStyle(color: _riskFactor > 1.0 ? Colors.orangeAccent : Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),

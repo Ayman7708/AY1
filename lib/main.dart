@@ -634,7 +634,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 }
 
-// شاشة وويدجت "البحث العميق 🔍"
+// ويدجت "البحث العميق 🔍"
 class DeepSearchTab extends StatefulWidget {
   final List<dynamic> cryptoList;
   const DeepSearchTab({super.key, required this.cryptoList});
@@ -645,7 +645,6 @@ class DeepSearchTab extends StatefulWidget {
 
 class _DeepSearchTabState extends State<DeepSearchTab> {
   final TextEditingController _searchCtrl = TextEditingController();
-  dynamic _selectedCoin;
   Map<String, dynamic>? _deepDetails;
   bool _isAnalyzing = false;
 
@@ -707,7 +706,6 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
                             (c) => c['symbol'].toString().toLowerCase() == query || c['name'].toString().toLowerCase().contains(query),
                             orElse: () => widget.cryptoList.first,
                           );
-                          setState(() => _selectedCoin = match);
                           _fetchDeepData(match['id']);
                         }
                       },
@@ -756,7 +754,6 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
     double sellZone = currentPrice * 1.28;
     double whaleEntryZone = currentPrice * 0.91;
 
-    // حالة التوصية
     String advice = 'الانتظار والتجميع 🟡';
     Color adviceColor = Colors.amberAccent;
     if (athChange < -75.0) {
@@ -770,7 +767,6 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 1. التوصية الرئيسية للعملة
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(14),
@@ -788,8 +784,6 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // 2. إحصائيات عدد العملات وأعلى قمة وأدنى قاع
         Card(
           color: const Color(0xFF151922),
           child: Padding(
@@ -807,8 +801,6 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
             ),
           ),
         ),
-
-        // 3. صفقات Long vs Short في المنصات
         Card(
           color: const Color(0xFF151922),
           child: Padding(
@@ -826,8 +818,6 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
             ),
           ),
         ),
-
-        // 4. مناطق الحيتان ومناطق الشراء والبيع القوية
         Card(
           color: const Color(0xFF151922),
           child: Padding(
@@ -844,8 +834,6 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
             ),
           ),
         ),
-
-        // 5. التوقع الزمني للوصول للقمة أو القاع
         Card(
           color: const Color(0xFF151922),
           child: Padding(

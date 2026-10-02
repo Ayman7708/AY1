@@ -51,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _activeTrades = [];
   List<Map<String, dynamic>> _tradeHistory = [];
 
-  // خيارات التداول التلقائي الحقيقي وبرايمات الـ API
   bool _isAutoTradingEnabled = true;
   bool _isLiveRealFunds = false; 
   String _binanceApiKey = '';
@@ -135,13 +134,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // خوارزمية التداول الآلي ورفع الستوب المحمول (Trailing Stop) مع الأهداف الثلاثة
   void _processAutoTradingEngine() {
     if (_cryptoList.isEmpty) return;
 
     List<Map<String, dynamic>> updatedActive = [];
 
-    // 1. مراقبة الصفقات المفتوحة ورفع وقف الخسارة ديناميكياً
     for (var trade in List<Map<String, dynamic>>.from(_activeTrades)) {
       final coin = _cryptoList.firstWhere(
         (c) => c['id'] == trade['id'],
@@ -154,26 +151,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         double tp1 = (trade['tp1'] as num).toDouble();
         double tp2 = (trade['tp2'] as num).toDouble();
         double tp3 = (trade['tp3'] as num).toDouble();
-        double currentStopLoss = (trade['stopLoss'] as num).toDouble();
         int achievedTps = trade['achievedTps'] ?? 0;
 
-        // ضرب الهدف الأول -> رفع وقف الخسارة لنقطة الدخول
         if (currentPrice >= tp1 && achievedTps < 1) {
           trade['stopLoss'] = entry;
           trade['achievedTps'] = 1;
-        }
-        // ضرب الهدف الثاني -> رفع وقف الخسارة إلى الهدف الأول
-        else if (currentPrice >= tp2 && achievedTps < 2) {
+        } else if (currentPrice >= tp2 && achievedTps < 2) {
           trade['stopLoss'] = tp1;
           trade['achievedTps'] = 2;
-        }
-        // ضرب الهدف الثالث الأخير -> إغلاق بجميع الأرباح
-        else if (currentPrice >= tp3) {
+        } else if (currentPrice >= tp3) {
           _closeTrade(trade, true, closePrice: tp3);
           continue;
         }
 
-        // ضرب الستوب المتحرك الحالي
         if (currentPrice <= (trade['stopLoss'] as num).toDouble()) {
           bool isWinTrade = currentPrice > entry;
           _closeTrade(trade, isWinTrade, closePrice: (trade['stopLoss'] as num).toDouble());
@@ -188,17 +178,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     _activeTrades = updatedActive;
 
-    // 2. البحث والفتح الآلي للصفقات التلقائية السريعة
     if (_isAutoTradingEnabled) {
       for (var coin in _cryptoList) {
         double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
         double rsi = calculateRSI(coin);
         
-        // شرط كشف الموجه القوية الآلية
         if (change24 >= 1.8 && rsi >= 45.0 && rsi <= (65.0 / _riskFactor)) {
           int activeSameCoin = _activeTrades.where((t) => t['id'] == coin['id']).length;
 
-          // السماح بفتح حتى 3 صفقات متتالية عند صحة واستمرار الموجة
           if (activeSameCoin < 3) {
             _executeAutoTradeEntry(coin, activeSameCoin + 1);
           }
@@ -213,10 +200,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _executeAutoTradeEntry(dynamic coin, int waveIndex) {
     double price = (coin['current_price'] ?? 0).toDouble();
 
-    // إعداد الأهداف الثلاثة بنسب متصاعدة للموجة
-    double tp1 = price * (1.0 + (0.010 * waveIndex)); // Target 1
-    double tp2 = price * (1.0 + (0.022 * waveIndex)); // Target 2
-    double tp3 = price * (1.0 + (0.038 * waveIndex)); // Target 3
+    double tp1 = price * (1.0 + (0.010 * waveIndex));
+    double tp2 = price * (1.0 + (0.022 * waveIndex));
+    double tp3 = price * (1.0 + (0.038 * waveIndex));
     double stopLoss = price * (1.0 - (0.007 * _riskFactor));
 
     var newTrade = {
@@ -238,14 +224,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     _activeTrades.add(newTrade);
 
-    // إذا كان التداول الحقيقي مفعلاً يتم إرسال طلب API للخدمة
     if (_isLiveRealFunds && _binanceApiKey.isNotEmpty) {
-      _sendBinanceApiOrder(coin['symbol'].toString().toUpperCase() + 'USDT', 'BUY', 75);
+      _sendBinanceApiOrder(coin['symbol'].toString().toUpperCase() + 'USDT', 'BUY');
     }
   }
 
-  // محرك تشفير وإرسال الأوامر للمنصات المركزية بـ API HMAC-SHA256
-  Future<void> _sendBinanceApiOrder(String symbol, String side, int leverage) async {
+  Future<void> _sendBinanceApiOrder(String symbol, String side) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final queryString = 'symbol=$symbol&side=$side&type=MARKET&timestamp=$timestamp';
@@ -353,7 +337,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // نافذة ضبط مفاتيح الـ API والتداول الحقيقي
   void _showApiSettingsDialog() {
     TextEditingController keyCtrl = TextEditingController(text: _binanceApiKey);
     TextEditingController secCtrl = TextEditingController(text: _binanceApiSecret);
@@ -409,7 +392,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // قائمة الصفقات النشطة المحترفة بالأهداف الثلاثة والستوب المحمول
   Widget _buildActiveTradesView() {
     return Column(
       children: [
@@ -483,7 +465,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ],
                             ),
                             const SizedBox(height: 8),
-                            // شريط الأهداف الثلاثة المرئي
                             Row(
                               children: [
                                 _buildTpBadge('🎯 TP1', (trade['tp1'] as num).toDouble(), achievedTps >= 1),
@@ -548,7 +529,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                child: const Text('🛡️️ خوارزمية ذكية متطورة', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('🛡 خوارزمية ذكية متطورة', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ],
           ),

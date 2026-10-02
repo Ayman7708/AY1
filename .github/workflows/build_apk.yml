@@ -1,4 +1,4 @@
-name: Build Ayman7708 Signed APK
+name: Build Ayman7708 Release APK
 
 on:
   push:
@@ -11,31 +11,31 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Java JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
       - name: Set up Flutter
-        uses: actions/setup-flutter@v2
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.6'
 
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build APK Release
+      - name: Build Signed Release APK
         run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Rename APK Output
+      - name: Rename Output APK
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/Ayman7708-App.apk
 
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v3
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: Ayman7708-Official-App
+          name: Ayman7708-Release-APK
           path: build/app/outputs/flutter-apk/Ayman7708-App.apk

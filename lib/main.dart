@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _loadSavedData();
     fetchLiveMarketData();
   }
@@ -222,9 +222,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return (change24 > (1.5 * _riskFactor) || rsi > 58.0) && aiScore >= 65.0;
   }
 
-  void _enterTrade(dynamic coin) {
+  void _enterTrade(dynamic coin, {bool isScalp = false, double leverage = 75.0}) {
     double price = (coin['current_price'] ?? 0).toDouble();
-    var atrBounds = calculateDynamicAtrBounds(coin);
+    double targetPrice;
+    double stopLossPrice;
+
+    if (isScalp) {
+      // أهداف سريعة جداً للمضاربة برافعة عالية (أقل من ساعة)
+      targetPrice = price * 1.012; // +1.2% هدف سريع
+      stopLossPrice = price * 0.994; // -0.6% ستوب قريب
+    } else {
+      var atrBounds = calculateDynamicAtrBounds(coin);
+      targetPrice = atrBounds['target']!;
+      stopLossPrice = atrBounds['stopLoss']!;
+    }
 
     setState(() {
       _activeTrades.add({
@@ -232,11 +243,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         'name': coin['name'],
         'symbol': coin['symbol'],
         'entryPrice': price,
-        'targetPrice': atrBounds['target'],
-        'stopLoss': atrBounds['stopLoss'],
+        'targetPrice': targetPrice,
+        'stopLoss': stopLossPrice,
         'entryTime': DateTime.now().toIso8601String(),
         'image': coin['image'],
         'aiScore': calculateAiKnnProbability(coin),
+        'isScalp': isScalp,
+        'leverage': leverage,
       });
     });
     _saveData();
@@ -244,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: Colors.green,
-        content: Text('🎯 تم تفعيل الصفقة واستخدام هدف وستوب ATR ديناميكي لـ ${coin['name']}!'),
+        content: Text('⚡ تم دخول صفقة سريعة (${leverage.toStringAsFixed(0)}x) لـ ${coin['name']}!'),
       ),
     );
   }
@@ -254,13 +267,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _activeTrades.removeWhere((t) => t['id'] == trade['id']);
       double finalClosePrice = closePrice ?? (isWin ? trade['targetPrice'] : trade['stopLoss']);
       double entry = (trade['entryPrice'] as num).toDouble();
-      double pnlPercent = ((finalClosePrice - entry) / entry) * 100;
+      double leverage = ((trade['leverage'] ?? 1.0) as num).toDouble();
+      double basePnlPercent = ((finalClosePrice - entry) / entry) * 100;
+      double leveragedPnl = basePnlPercent * leverage;
 
       _tradeHistory.add({
         ...trade,
         'isWin': isWin,
         'closePrice': finalClosePrice,
-        'pnlPercent': pnlPercent,
+        'pnlPercent': leveragedPnl,
         'autoClosed': autoClosed,
       });
       _updateAdaptiveStrategy();
@@ -276,7 +291,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             Icon(Icons.candlestick_chart, color: Colors.amberAccent),
             SizedBox(width: 8),
-            Text('Ayman7708 Deep AI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text('Ayman7708 Ultra Scalp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           ],
         ),
         actions: [
@@ -292,6 +307,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           unselectedLabelColor: Colors.grey,
           isScrollable: true,
           tabs: const [
+            Tab(icon: Icon(Icons.flash_on), text: 'صفقات سريعة (سكالبينج) ⚡'),
             Tab(icon: Icon(Icons.saved_search), text: 'البحث العميق 🔍'),
             Tab(icon: Icon(Icons.rocket_launch), text: 'انفجار قريب 🚀'),
             Tab(icon: Icon(Icons.track_changes), text: 'صفقاتي النشطة 🎯'),
@@ -306,6 +322,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           : TabBarView(
               controller: _tabController,
               children: [
+                _buildScalpingView(),
                 DeepSearchTab(cryptoList: _cryptoList),
                 _buildCryptoList(_cryptoList, 'breakout'),
                 _buildActiveTradesView(),
@@ -314,6 +331,133 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 _buildCryptoList(_cryptoList, 'smart_money'),
               ],
             ),
+    );
+  }
+
+  // شاشة الصفقات السريعة (السكالبينج برافعة مالية عالية)
+  Widget _buildScalpingView() {
+    List<dynamic> scalpCoins = _cryptoList.where((c) {
+      double change24 = (c['price_change_percentage_24h'] ?? 0).toDouble();
+      double rsi = calculateRSI(c);
+      return change24.abs() >= 1.2 && rsi >= 35.0 && rsi <= 68.0;
+    }).toList();
+
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.redAccent.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '⚡ قسم السكالبينج السريع (المدة: 15-60 دقيقة).\nالرافعات المالية العالية (75x - 125x) تتطلب الالتزام الدقيق بالأهداف ووقف الخسارة الموضح.',
+                  style: TextStyle(fontSize: 11, color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: scalpCoins.length,
+            itemBuilder: (context, index) {
+              final coin = scalpCoins[index];
+              final double price = (coin['current_price'] ?? 0).toDouble();
+              final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+              final double targetPrice = price * 1.012;
+              final double stopLossPrice = price * 0.994;
+
+              return Card(
+                color: const Color(0xFF151922),
+                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Colors.amberAccent, width: 0.8),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Image.network(coin['image'] ?? '', width: 22, height: 22, errorBuilder: (_, __, ___) => const Icon(Icons.currency_bitcoin)),
+                              const SizedBox(width: 8),
+                              Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                            child: const Text('⏱️ صفقة خاطفة (15-60 د)', style: TextStyle(color: Colors.amberAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('سعر الدخول: \$$price', style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                          Text('التغير: ${change24 >= 0 ? '+' : ''}${change24.toStringAsFixed(2)}%', style: TextStyle(fontSize: 11, color: change24 >= 0 ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('🎯 الهدف (+1.2%): \$${targetPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
+                          Text('🛑 الستوب (-0.6%): \$${stopLossPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
+                        ],
+                      ),
+                      const Divider(color: Colors.grey),
+                      const Text('اختر الرافعة المالية لدخول الصفقة المباشرة:', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
+                              onPressed: () => _enterTrade(coin, isScalp: true, leverage: 50.0),
+                              child: const Text('50x (ربح +60%)', style: TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.amberAccent),
+                              onPressed: () => _enterTrade(coin, isScalp: true, leverage: 75.0),
+                              child: const Text('75x (ربح +90%)', style: TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                              onPressed: () => _enterTrade(coin, isScalp: true, leverage: 100.0),
+                              child: const Text('100x (ربح +120%)', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -332,7 +476,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 icon: const Icon(Icons.history, color: Colors.black, size: 18),
                 label: const Text('انتقال لسجل الصفقات المغلقة 📊', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
                 onPressed: () {
-                  _tabController.animateTo(3);
+                  _tabController.animateTo(4);
                 },
               ),
             ],
@@ -350,6 +494,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     final trade = _activeTrades[index];
                     final coin = _cryptoList.firstWhere((c) => c['id'] == trade['id'], orElse: () => null);
                     double currentPrice = coin != null ? (coin['current_price'] ?? 0).toDouble() : (trade['entryPrice'] as num).toDouble();
+                    bool isScalp = trade['isScalp'] == true;
+                    double leverage = ((trade['leverage'] ?? 1.0) as num).toDouble();
 
                     return Card(
                       color: const Color(0xFF151922),
@@ -371,7 +517,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                                  child: const Text('🔒 صفقة نشطة ومراقبة', style: TextStyle(color: Colors.greenAccent, fontSize: 10)),
+                                  child: Text(isScalp ? '⚡ سكالبينج ${leverage.toStringAsFixed(0)}x' : '🔒 صفقة قياسية',
+                                      style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
@@ -384,8 +531,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ],
                             ),
                             const SizedBox(height: 4),
-                            Text('• الهدف الأول (ATR): \$${(trade['targetPrice'] as num).toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.greenAccent)),
-                            Text('• وقف الخسارة (ATR): \$${(trade['stopLoss'] as num).toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+                            Text('• الهدف: \$${(trade['targetPrice'] as num).toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.greenAccent)),
+                            Text('• وقف الخسارة: \$${(trade['stopLoss'] as num).toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
                             const Divider(color: Colors.grey),
                             Row(
                               children: [
@@ -495,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         subtitle: Text('دخول: \$${t['entryPrice']} | إغلاق: \$${(t['closePrice'] as num).toStringAsFixed(4)}${autoClosed ? ' (آلي)' : ''}',
                             style: const TextStyle(fontSize: 10, color: Colors.grey)),
                         trailing: Text(
-                          '${pnl >= 0 ? '+' : ''}${pnl.toStringAsFixed(2)}%',
+                          '${pnl >= 0 ? '+' : ''}${pnl.toStringAsFixed(1)}%',
                           style: TextStyle(color: isWin ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -577,8 +724,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               final double aiProbability = calculateAiKnnProbability(coin);
               final bool validEntry = isEntryValid(coin);
 
-              final bool isAlreadyInTrade = _activeTrades.any((t) => t['id'] == coin['id']);
-
               return Card(
                 color: const Color(0xFF151922),
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -634,7 +779,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 }
 
-// ويدجت "البحث العميق 🔍"
 class DeepSearchTab extends StatefulWidget {
   final List<dynamic> cryptoList;
   const DeepSearchTab({super.key, required this.cryptoList});
@@ -898,19 +1042,4 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
       ),
     );
   }
-}
-
-class CandleData {
-  final double open;
-  final double high;
-  final double low;
-  final double close;
-  final double volume;
-  double ema7 = 0.0;
-  double ema25 = 0.0;
-  double ema99 = 0.0;
-  bool isOrderBlock = false;
-  String? signal;
-
-  CandleData({required this.open, required this.high, required this.low, required this.close, required this.volume});
 }

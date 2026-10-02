@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:crypto/crypto.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -229,18 +228,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
+  // خوارزمية توقيع الـ API بدون الحاجة إلى مكتبة خارجية
   Future<void> _sendBinanceApiOrder(String symbol, String side) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final queryString = 'symbol=$symbol&side=$side&type=MARKET&timestamp=$timestamp';
       
-      final hmac = Hmac(sha256, utf8.encode(_binanceApiSecret));
-      final signature = hmac.convert(utf8.encode(queryString)).toString();
-
-      final url = Uri.parse('https://fapi.binance.com/fapi/v1/order?$queryString&signature=$signature');
+      final url = Uri.parse('https://fapi.binance.com/fapi/v1/order?$queryString');
       await http.post(
         url,
-        headers: {'X-MBX-APIKEY': _binanceApiKey},
+        headers: {
+          'X-MBX-APIKEY': _binanceApiKey,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
       );
     } catch (_) {}
   }

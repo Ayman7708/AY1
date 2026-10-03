@@ -38,7 +38,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> meState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
@@ -138,7 +138,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // خوارزمية فحص واكتشاف الصفقات عالية النسبة (المضمونة)
   void _scanForGuaranteedTrades() {
     if (_cryptoList.isEmpty) return;
 
@@ -524,7 +523,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // شريط إشعار الصفقة المضمونة المباشر
   Widget _buildGuaranteedBanner() {
     final coin = _topGuaranteedTrade!['coin'];
     final double winRate = _topGuaranteedTrade!['winRate'];

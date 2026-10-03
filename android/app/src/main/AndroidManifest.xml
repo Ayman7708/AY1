@@ -2,9 +2,9 @@
     package="com.ayman7708.app">
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="Ayman7708"
+        android:label="Ayman7708 Trading Bot"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@android:drawable/sym_def_app_icon"
         android:allowBackup="true">
         <activity
             android:name=".MainActivity"

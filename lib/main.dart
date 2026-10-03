@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,6 +54,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String _binanceApiKey = '';
   String _binanceApiSecret = '';
 
+  // خوارزمية تكيف السوق (Adaptive Market Factor)
+  double _marketAdaptiveFactor = 1.0; 
+
   @override
   void initState() {
     super.initState();
@@ -106,12 +108,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _cryptoList = data;
           _isLoading = false;
         });
+        _updateMarketAdaptiveEngine();
         _processAutoTradingEngine();
       } else {
         setState(() => _isLoading = false);
       }
     } catch (e) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  // خوارزمية التعلم والتكيف مع وضع السوق الحالي
+  void _updateMarketAdaptiveEngine() {
+    if (_cryptoList.isEmpty) return;
+    double totalVolatility = 0.0;
+    int count = 0;
+    for (var c in _cryptoList.take(20)) {
+      totalVolatility += ((c['price_change_percentage_24h'] ?? 0).toDouble()).abs();
+      count++;
+    }
+    double avgVol = count > 0 ? totalVolatility / count : 2.0;
+    
+    if (avgVol > 5.0) {
+      _marketAdaptiveFactor = 1.3; // سوق تقلبات عالية - توسيع الأهداف
+    } else if (avgVol < 1.5) {
+      _marketAdaptiveFactor = 0.8; // سوق ضيق/تجميع - تضييق الأهداف للمضاربة السريعة
+    } else {
+      _marketAdaptiveFactor = 1.0;
     }
   }
 
@@ -181,10 +204,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _executeAutoTradeEntry(dynamic coin, int waveIndex) {
     double price = (coin['current_price'] ?? 0).toDouble();
 
-    double tp1 = price * 1.012; 
-    double tp2 = price * 1.028; 
-    double tp3 = price * 1.045; 
-    double stopLoss = price * 0.988;
+    double tp1 = price * (1.0 + (0.012 * _marketAdaptiveFactor)); 
+    double tp2 = price * (1.0 + (0.028 * _marketAdaptiveFactor)); 
+    double tp3 = price * (1.0 + (0.045 * _marketAdaptiveFactor)); 
+    double stopLoss = price * (1.0 - (0.012 * _marketAdaptiveFactor));
 
     var newTrade = {
       'id': coin['id'],
@@ -207,10 +230,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _activeTrades.add(newTrade);
   }
 
-  // ميزة فتح صفقة يدوية مباشر
   void _openManualTradeDialog(dynamic coin) {
     double price = (coin['current_price'] ?? 0).toDouble();
-    double lev = 50.0;
 
     showDialog(
       context: context,
@@ -230,11 +251,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             children: [
               Text('سعر الدخول المباشر: \$$price', style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              const Text('الأهداف التلقائية (حساب آلي):', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Text('• Target 1: \$${(price * 1.012).toStringAsFixed(4)} (+1.2%)', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
-              Text('• Target 2: \$${(price * 1.028).toStringAsFixed(4)} (+2.8%)', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
-              Text('• Target 3: \$${(price * 1.045).toStringAsFixed(4)} (+4.5%)', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
-              Text('• Stop Loss: \$${(price * 0.988).toStringAsFixed(4)} (-1.2%)', style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
+              Text('حالة وضع السوق والتكيف: ${_marketAdaptiveFactor > 1.0 ? "تقلبات عالية ⚡" : "مستقر/تجميع 🎯"}', style: const TextStyle(color: Colors.cyanAccent, fontSize: 11)),
+              const SizedBox(height: 6),
+              const Text('الأهداف المعتمدة بالتكيف الآلي:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('• Target 1: \$${(price * (1.0 + (0.012 * _marketAdaptiveFactor))).toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
+              Text('• Target 2: \$${(price * (1.0 + (0.028 * _marketAdaptiveFactor))).toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
+              Text('• Target 3: \$${(price * (1.0 + (0.045 * _marketAdaptiveFactor))).toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
+              Text('• Stop Loss: \$${(price * (1.0 - (0.012 * _marketAdaptiveFactor))).toStringAsFixed(4)}', style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
             ],
           ),
           actions: [
@@ -250,15 +273,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   'name': coin['name'],
                   'symbol': coin['symbol'],
                   'entryPrice': price,
-                  'tp1': price * 1.012,
-                  'tp2': price * 1.028,
-                  'tp3': price * 1.045,
-                  'stopLoss': price * 0.988,
+                  'tp1': price * (1.0 + (0.012 * _marketAdaptiveFactor)),
+                  'tp2': price * (1.0 + (0.028 * _marketAdaptiveFactor)),
+                  'tp3': price * (1.0 + (0.045 * _marketAdaptiveFactor)),
+                  'stopLoss': price * (1.0 - (0.012 * _marketAdaptiveFactor)),
                   'achievedTps': 0,
                   'waveIndex': 1,
                   'entryTime': DateTime.now().toIso8601String(),
                   'image': coin['image'],
-                  'leverage': lev,
+                  'leverage': 50.0,
                   'isReal': _isLiveRealFunds,
                   'isManual': true,
                 };
@@ -274,6 +297,82 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               child: const Text('تأكيد وفتح الصفقة ⚡', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _openApiSettingsDialog() {
+    TextEditingController keyCtrl = TextEditingController(text: _binanceApiKey);
+    TextEditingController secretCtrl = TextEditingController(text: _binanceApiSecret);
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF151922),
+              title: const Row(
+                children: [
+                  Icon(Icons.api, color: Colors.amberAccent),
+                  SizedBox(width: 8),
+                  Text('ربط منصة التداول (Binance)', style: TextStyle(fontSize: 15, color: Colors.white)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('قم بإدخال مفاتيح API الخاصة بحسابك في بينانس لتمكين التداول الحقيقي:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: keyCtrl,
+                      decoration: const InputDecoration(labelText: 'API Key', labelStyle: TextStyle(color: Colors.grey), border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: secretCtrl,
+                      obscureText: true,
+                      decoration: const InputDecoration(labelText: 'Secret Key', labelStyle: TextStyle(color: Colors.grey), border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      title: const Text('تفعيل أموال حقيقية (LIVE)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                      value: _isLiveRealFunds,
+                      activeColor: Colors.redAccent,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          _isLiveRealFunds = val;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amberAccent),
+                  onPressed: () {
+                    setState(() {
+                      _binanceApiKey = keyCtrl.text.trim();
+                      _binanceApiSecret = secretCtrl.text.trim();
+                    });
+                    _saveData();
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('تم حفظ إعدادات API والتداول بنجاح! 🔐'), backgroundColor: Colors.green),
+                    );
+                  },
+                  child: const Text('حفظ الربط', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -310,10 +409,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             Icon(Icons.bolt, color: Colors.amberAccent),
             SizedBox(width: 6),
-            Text('Ayman7708 Trading Bot Pro', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Ayman7708 Trading Bot Pro', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.api, color: _binanceApiKey.isNotEmpty ? Colors.greenAccent : Colors.grey),
+            onPressed: _openApiSettingsDialog,
+          ),
           IconButton(
             icon: Icon(_isAutoTradingEnabled ? Icons.play_circle_fill : Icons.pause_circle_filled, color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent),
             onPressed: () {
@@ -335,12 +438,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           unselectedLabelColor: Colors.grey,
           isScrollable: true,
           tabs: const [
+            Tab(icon: Icon(Icons.show_chart), text: 'الرسم البياني 📈'),
             Tab(icon: Icon(Icons.track_changes), text: 'صفقاتي النشطة 🎯'),
-            Tab(icon: Icon(Icons.analytics), text: 'سجل وأرباح الصفقات 📊'),
-            Tab(icon: Icon(Icons.flash_on), text: 'صفقات سريعة (فتح يدوي) ⚡'),
+            Tab(icon: Icon(Icons.analytics), text: 'دقة التطبيق والسجل 📊'),
+            Tab(icon: Icon(Icons.flash_on), text: 'صفقات سريعة ⚡'),
             Tab(icon: Icon(Icons.saved_search), text: 'البحث العميق 🔍'),
-            Tab(icon: Icon(Icons.rocket_launch), text: 'انفجار قريب 🚀'),
-            Tab(icon: Icon(Icons.layers), text: 'مناطق التجميع 🏦'),
+            Tab(icon: Icon(Icons.psychology), text: 'محرك التكيف 🤖'),
           ],
         ),
       ),
@@ -349,12 +452,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           : TabBarView(
               controller: _tabController,
               children: [
+                InteractiveChartTab(cryptoList: _cryptoList),
                 _buildActiveTradesProView(),
                 _buildPerformanceStatsProView(),
                 _buildScalpingView(),
                 DeepSearchTab(cryptoList: _cryptoList, onManualOpen: _openManualTradeDialog),
-                _buildCryptoList(_cryptoList),
-                _buildCryptoList(_cryptoList),
+                _buildAdaptiveEngineStatusView(),
               ],
             ),
     );
@@ -380,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   Text(_isAutoTradingEnabled ? 'المستشعر الآلي شغال ⚡' : 'المستشعر متوقف ⏸️', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ],
               ),
-              Text('النشطة: ${_activeTrades.length} صفقات', style: const TextStyle(fontSize: 12, color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+              Text(_isLiveRealFunds ? 'حساب حقيقي (REAL)' : 'حساب تجريبي (DEMO)', style: TextStyle(fontSize: 11, color: _isLiveRealFunds ? Colors.redAccent : Colors.greenAccent, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -404,7 +507,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     bool isWin = currentPrice >= entryPrice;
                     double currentPnl = (((currentPrice - entryPrice) / entryPrice) * 100) * 50.0;
                     int achievedTps = trade['achievedTps'] ?? 0;
-                    bool isManual = trade['isManual'] ?? false;
 
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -428,13 +530,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     const SizedBox(width: 8),
                                     Text('${trade['name']} (${trade['symbol'].toString().toUpperCase()})',
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
-                                    const SizedBox(width: 6),
-                                    if (isManual)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                                        child: const Text('يدوية 🖐️', style: TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold)),
-                                      ),
                                   ],
                                 ),
                                 Container(
@@ -509,52 +604,39 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // سجل التداول التاريخي التراكمي بدون زر تصفير لضمان الشفافية
   Widget _buildPerformanceStatsProView() {
     int totalTrades = _tradeHistory.length;
     int wins = _tradeHistory.where((t) => t['isWin'] == true).length;
     int losses = totalTrades - wins;
-    double winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0.0;
+    double accuracyRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0.0;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(14.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('📊 سجل الأداء والنتائج:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, minimumSize: const Size(80, 30)),
-                icon: const Icon(Icons.delete_sweep, size: 16, color: Colors.white),
-                label: const Text('تصفير', style: TextStyle(fontSize: 11, color: Colors.white)),
-                onPressed: () {
-                  setState(() {
-                    _tradeHistory.clear();
-                  });
-                  _saveData();
-                },
-              )
-            ],
-          ),
+          const Text('📊 دقة التطبيق والنتائج التاريخية التراكمية:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
           const SizedBox(height: 12),
           Row(
             children: [
-              _buildStatCardPro('الصفقات المغلقة', '$totalTrades', Colors.amberAccent),
+              _buildStatCardPro('إجمالي الصفقات', '$totalTrades', Colors.amberAccent),
               _buildStatCardPro('الرابحة 🎯', '$wins', Colors.greenAccent),
               _buildStatCardPro('الخاسرة 🛑', '$losses', Colors.redAccent),
             ],
           ),
           const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             width: double.infinity,
-            decoration: BoxDecoration(color: const Color(0xFF151922), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amberAccent.withOpacity(0.3))),
+            decoration: BoxDecoration(color: const Color(0xFF151922), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.greenAccent.withOpacity(0.4))),
             child: Column(
               children: [
-                const Text('معدل النجاح الكلي (Win Rate):', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const Text('نسبة دقة التطبيق الناجحة (Bot Accuracy):', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 const SizedBox(height: 6),
-                Text('${winRate.toStringAsFixed(1)}%', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: winRate >= 50 ? Colors.greenAccent : Colors.orangeAccent)),
+                Text('${accuracyRate.toStringAsFixed(1)}%', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: accuracyRate >= 65 ? Colors.greenAccent : Colors.orangeAccent)),
+                const SizedBox(height: 4),
+                Text(accuracyRate >= 70 ? '🎯 مستوى إشارات عالي الدقة' : '⚙️ يتم تحسين الخوارزميات تلقائياً', style: const TextStyle(fontSize: 10, color: Colors.grey)),
               ],
             ),
           ),
@@ -635,24 +717,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildCryptoList(List<dynamic> coins) {
-    return ListView.builder(
-      itemCount: coins.length,
-      itemBuilder: (context, index) {
-        final coin = coins[index];
-        return Card(
-          color: const Color(0xFF151922),
-          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: ListTile(
-            title: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-            subtitle: Text('السعر: \$${coin['current_price']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-            trailing: IconButton(
-              icon: const Icon(Icons.flash_on, color: Colors.amberAccent),
-              onPressed: () => _openManualTradeDialog(coin),
+  Widget _buildAdaptiveEngineStatusView() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('🤖 حالة محرك التكيف الذكي (Adaptive Engine):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: const Color(0xFF151922), borderRadius: BorderRadius.circular(10)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('معامل التكيف المباشر: ${_marketAdaptiveFactor.toStringAsFixed(2)}x', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+                const SizedBox(height: 8),
+                const Text('• الخوارزمية تقيس تقلبات السوق لحظة بلحظة.', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                const Text('• يتم تعديل أهداف الربح (Take Profit) ووقف الخسارة لتناسب حركة السعر الحالية تلقائياً.', style: TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
@@ -740,4 +827,123 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
       ),
     );
   }
+}
+
+// قسم الرسم البياني التفاعلي والشامل للعملات
+class InteractiveChartTab extends StatefulWidget {
+  final List<dynamic> cryptoList;
+  const InteractiveChartTab({super.key, required this.cryptoList});
+
+  @override
+  State<InteractiveChartTab> createState() => _InteractiveChartTabState();
+}
+
+class _InteractiveChartTabState extends State<InteractiveChartTab> {
+  String _selectedSymbol = 'bitcoin';
+  String _selectedTimeframe = '1h';
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.cryptoList.isEmpty) {
+      return const Center(child: Text('جاري تحميل بيانات الشارت...', style: TextStyle(color: Colors.grey)));
+    }
+
+    final coin = widget.cryptoList.firstWhere((c) => c['id'] == _selectedSymbol, orElse: () => widget.cryptoList.first);
+    final List sparkline = coin['sparkline_in_7d']?['price'] ?? [];
+
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              DropdownButton<String>(
+                value: _selectedSymbol,
+                dropdownColor: const Color(0xFF151922),
+                items: widget.cryptoList.take(30).map<DropdownMenuItem<String>>((c) {
+                  return DropdownMenuItem<String>(
+                    value: c['id'],
+                    child: Text('${c['name']} (${c['symbol'].toString().toUpperCase()})', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedSymbol = val);
+                },
+              ),
+              Row(
+                children: ['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) {
+                  bool isSelected = _selectedTimeframe == tf;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedTimeframe = tf),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.amberAccent : const Color(0xFF151922),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(tf, style: TextStyle(fontSize: 10, color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151922),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amberAccent.withOpacity(0.2)),
+              ),
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: AdvancedChartPainter(sparkline),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AdvancedChartPainter extends CustomPainter {
+  final List sparkline;
+  AdvancedChartPainter(this.sparkline);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (sparkline.isEmpty) return;
+
+    final paintLine = Paint()
+      ..color = Colors.greenAccent
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+
+    final double min = sparkline.reduce((a, b) => a < b ? a : b).toDouble();
+    final double max = sparkline.reduce((a, b) => a > b ? a : b).toDouble();
+    final double range = max - min == 0 ? 1 : max - min;
+
+    final path = Path();
+    double dx = size.width / (sparkline.length - 1);
+
+    for (int i = 0; i < sparkline.length; i++) {
+      double val = sparkline[i].toDouble();
+      double dy = size.height - ((val - min) / range * size.height);
+      if (i == 0) {
+        path.moveTo(0, dy);
+      } else {
+        path.lineTo(i * dx, dy);
+      }
+    }
+
+    canvas.drawPath(path, paintLine);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

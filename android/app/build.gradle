@@ -8,26 +8,19 @@ android {
     namespace "com.ayman7708.app"
     compileSdk 34
 
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
-
     defaultConfig {
         applicationId "com.ayman7708.app"
-        minSdkVersion 21
-        targetSdkVersion 34
-        versionCode 8
-        versionName "1.0.7"
+        minSdk 21
+        targetSdk 34
+        versionCode 2
+        versionName "1.0.1"
     }
 
     buildTypes {
         release {
             signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }

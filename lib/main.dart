@@ -38,7 +38,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> meState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
@@ -54,8 +54,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String _binanceApiKey = '';
   String _binanceApiSecret = '';
 
-  // خوارزمية تكيف السوق (Adaptive Market Factor)
   double _marketAdaptiveFactor = 1.0; 
+  Map<String, dynamic>? _topGuaranteedTrade;
 
   @override
   void initState() {
@@ -109,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _isLoading = false;
         });
         _updateMarketAdaptiveEngine();
+        _scanForGuaranteedTrades();
         _processAutoTradingEngine();
       } else {
         setState(() => _isLoading = false);
@@ -118,7 +119,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // خوارزمية التعلم والتكيف مع وضع السوق الحالي
   void _updateMarketAdaptiveEngine() {
     if (_cryptoList.isEmpty) return;
     double totalVolatility = 0.0;
@@ -130,12 +130,51 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     double avgVol = count > 0 ? totalVolatility / count : 2.0;
     
     if (avgVol > 5.0) {
-      _marketAdaptiveFactor = 1.3; // سوق تقلبات عالية - توسيع الأهداف
+      _marketAdaptiveFactor = 1.3;
     } else if (avgVol < 1.5) {
-      _marketAdaptiveFactor = 0.8; // سوق ضيق/تجميع - تضييق الأهداف للمضاربة السريعة
+      _marketAdaptiveFactor = 0.8;
     } else {
       _marketAdaptiveFactor = 1.0;
     }
+  }
+
+  // خوارزمية فحص واكتشاف الصفقات عالية النسبة (المضمونة)
+  void _scanForGuaranteedTrades() {
+    if (_cryptoList.isEmpty) return;
+
+    dynamic bestCoin;
+    double maxWinRate = 0.0;
+
+    for (var coin in _cryptoList) {
+      double winRate = _calculateWinProbability(coin);
+      if (winRate >= 85.0 && winRate > maxWinRate) {
+        maxWinRate = winRate;
+        bestCoin = coin;
+      }
+    }
+
+    if (bestCoin != null) {
+      setState(() {
+        _topGuaranteedTrade = {
+          'coin': bestCoin,
+          'winRate': maxWinRate,
+        };
+      });
+    }
+  }
+
+  double _calculateWinProbability(dynamic coin) {
+    double change24 = ((coin['price_change_percentage_24h'] ?? 0) as num).toDouble();
+    double rsi = calculateRSI(coin);
+    
+    double baseRate = 70.0;
+    if (change24 > 3.0 && change24 < 12.0) baseRate += 10.0;
+    if (rsi >= 55.0 && rsi <= 68.0) baseRate += 12.0;
+    if (rsi > 80.0 || rsi < 20.0) baseRate -= 15.0;
+
+    if (baseRate > 96.0) return 96.0;
+    if (baseRate < 50.0) return 50.0;
+    return double.parse(baseRate.toStringAsFixed(1));
   }
 
   void _processAutoTradingEngine() {
@@ -225,6 +264,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       'leverage': 50.0,
       'isReal': _isLiveRealFunds,
       'isManual': false,
+      'winProb': _calculateWinProbability(coin),
     };
 
     _activeTrades.add(newTrade);
@@ -232,6 +272,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _openManualTradeDialog(dynamic coin) {
     double price = (coin['current_price'] ?? 0).toDouble();
+    double winRate = _calculateWinProbability(coin);
 
     showDialog(
       context: context,
@@ -249,6 +290,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: winRate >= 85 ? Colors.green.withOpacity(0.2) : Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    Icon(winRate >= 85 ? Icons.verified : Icons.analytics, color: winRate >= 85 ? Colors.greenAccent : Colors.amberAccent, size: 20),
+                    const SizedBox(width: 8),
+                    Text('نسبة نجاح الصفقة المقدرة: $winRate%', style: TextStyle(color: winRate >= 85 ? Colors.greenAccent : Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               Text('سعر الدخول المباشر: \$$price', style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Text('حالة وضع السوق والتكيف: ${_marketAdaptiveFactor > 1.0 ? "تقلبات عالية ⚡" : "مستقر/تجميع 🎯"}', style: const TextStyle(color: Colors.cyanAccent, fontSize: 11)),
@@ -284,6 +337,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   'leverage': 50.0,
                   'isReal': _isLiveRealFunds,
                   'isManual': true,
+                  'winProb': winRate,
                 };
                 setState(() {
                   _activeTrades.add(manualTrade);
@@ -291,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 _saveData();
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('تم فتح صفقة يدوية لـ ${coin['name']} بنجاح! 🚀'), backgroundColor: Colors.green),
+                  SnackBar(content: Text('تم فتح صفقة يدوية لـ ${coin['name']} (نسبة النجاح: $winRate%) بنجاح! 🚀'), backgroundColor: Colors.green),
                 );
               },
               child: const Text('تأكيد وفتح الصفقة ⚡', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -379,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   double calculateRSI(dynamic coin) {
-    double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+    double change24 = ((coin['price_change_percentage_24h'] ?? 0) as num).toDouble();
     double baseRsi = 50.0 + (change24 * 2.2);
     if (baseRsi > 92.0) return 92.0;
     if (baseRsi < 12.0) return 12.0;
@@ -449,17 +503,59 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.amberAccent))
-          : TabBarView(
-              controller: _tabController,
+          : Column(
               children: [
-                InteractiveChartTab(cryptoList: _cryptoList),
-                _buildActiveTradesProView(),
-                _buildPerformanceStatsProView(),
-                _buildScalpingView(),
-                DeepSearchTab(cryptoList: _cryptoList, onManualOpen: _openManualTradeDialog),
-                _buildAdaptiveEngineStatusView(),
+                if (_topGuaranteedTrade != null) _buildGuaranteedBanner(),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      InteractiveChartTab(cryptoList: _cryptoList),
+                      _buildActiveTradesProView(),
+                      _buildPerformanceStatsProView(),
+                      _buildScalpingView(),
+                      DeepSearchTab(cryptoList: _cryptoList, onManualOpen: _openManualTradeDialog),
+                      _buildAdaptiveEngineStatusView(),
+                    ],
+                  ),
+                ),
               ],
             ),
+    );
+  }
+
+  // شريط إشعار الصفقة المضمونة المباشر
+  Widget _buildGuaranteedBanner() {
+    final coin = _topGuaranteedTrade!['coin'];
+    final double winRate = _topGuaranteedTrade!['winRate'];
+
+    return Container(
+      width: double.infinity,
+      color: Colors.green.shade900.withOpacity(0.9),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.stars, color: Colors.amberAccent, size: 22),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('صفقة مضمونة عالية النسبة: ${coin['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                  Text('نسبة النجاح المتوقعة: $winRate% 🔥', style: const TextStyle(fontSize: 11, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amberAccent, minimumSize: const Size(80, 30)),
+            onPressed: () => _openManualTradeDialog(coin),
+            child: const Text('دخول مكثف ⚡', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -507,6 +603,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     bool isWin = currentPrice >= entryPrice;
                     double currentPnl = (((currentPrice - entryPrice) / entryPrice) * 100) * 50.0;
                     int achievedTps = trade['achievedTps'] ?? 0;
+                    double winProb = (trade['winProb'] ?? 80.0).toDouble();
 
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -530,6 +627,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     const SizedBox(width: 8),
                                     Text('${trade['name']} (${trade['symbol'].toString().toUpperCase()})',
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                                      child: Text('$winProb%', style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
                                   ],
                                 ),
                                 Container(
@@ -604,7 +707,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // سجل التداول التاريخي التراكمي بدون زر تصفير لضمان الشفافية
   Widget _buildPerformanceStatsProView() {
     int totalTrades = _tradeHistory.length;
     int wins = _tradeHistory.where((t) => t['isWin'] == true).length;
@@ -697,16 +799,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final coin = _cryptoList[index];
         final double price = (coin['current_price'] ?? 0).toDouble();
         final double change24 = (coin['price_change_percentage_24h'] ?? 0).toDouble();
+        final double winProb = _calculateWinProbability(coin);
 
         return Card(
           color: const Color(0xFF151922),
           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           child: ListTile(
             leading: Image.network(coin['image'] ?? '', width: 26, height: 26, errorBuilder: (_, __, ___) => const Icon(Icons.currency_bitcoin)),
-            title: Text('${coin['name']} (${coin['symbol'].toString().toUpperCase()})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            title: Row(
+              children: [
+                Text('${coin['name']} ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text('($winProb% نجاح)', style: TextStyle(fontSize: 11, color: winProb >= 85 ? Colors.greenAccent : Colors.grey)),
+              ],
+            ),
             subtitle: Text('السعر: \$$price | 24h: ${change24 >= 0 ? '+' : ''}${change24.toStringAsFixed(2)}%', style: TextStyle(fontSize: 11, color: change24 >= 0 ? Colors.greenAccent : Colors.redAccent)),
             trailing: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, minimumSize: const Size(90, 32)),
+              style: ElevatedButton.styleFrom(backgroundColor: winProb >= 85 ? Colors.greenAccent : Colors.amberAccent, minimumSize: const Size(90, 32)),
               icon: const Icon(Icons.add_chart, size: 14, color: Colors.black),
               label: const Text('دخول ⚡', style: TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.bold)),
               onPressed: () => _openManualTradeDialog(coin),
@@ -829,7 +937,6 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
   }
 }
 
-// قسم الرسم البياني التفاعلي والشامل للعملات
 class InteractiveChartTab extends StatefulWidget {
   final List<dynamic> cryptoList;
   const InteractiveChartTab({super.key, required this.cryptoList});

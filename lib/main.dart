@@ -494,7 +494,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       appBar: AppBar(
         title: Row(
           children: [
-            // شعار احترافي خارجي للحرفين Ayman Crypto (AC)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -503,7 +502,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               child: const Text(
                 'AC',
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.black, fontSize: 15, letterSpacing: 1),
+                style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1),
               ),
             ),
             const SizedBox(width: 10),

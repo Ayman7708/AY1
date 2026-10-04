@@ -471,7 +471,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       double entry = (trade['entryPrice'] as num).toDouble();
       double leverage = ((trade['leverage'] ?? 50.0) as num).toDouble();
       
-      // حساب PNL الفعلي بناء على حركة السعر والرافعة المالية
       double priceDiffRatio = (closePrice - entry) / entry;
       double pnl = priceDiffRatio * 100 * leverage;
 
@@ -1081,10 +1080,17 @@ class _InteractiveCandleChartTabState extends State<InteractiveCandleChartTab> {
       List subList = rawPrices.sublist(i, end);
 
       if (subList.isNotEmpty) {
-        double open = subList.first.toDouble();
-        double close = subList.last.toDouble();
-        double high = subList.map((e) => e.toDouble()).reduce(max);
-        double low = subList.map((e) => e.toDouble()).reduce(min);
+        double open = (subList.first as num).toDouble();
+        double close = (subList.last as num).toDouble();
+        
+        // إصلاح دالة الـ Math المقترحة والأضمن لمنع خطأ التجميع في GitHub Actions
+        double high = subList
+            .map((e) => (e as num).toDouble())
+            .reduce((a, b) => max(a, b));
+            
+        double low = subList
+            .map((e) => (e as num).toDouble())
+            .reduce((a, b) => min(a, b));
 
         candles.add(CandleData(open: open, high: high, low: low, close: close));
       }
@@ -1196,8 +1202,8 @@ class ProfessionalCandlePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (candles.isEmpty) return;
 
-    double minPrice = candles.map((c) => c.low).reduce(min);
-    double maxPrice = candles.map((c) => c.high).reduce(max);
+    double minPrice = candles.map((c) => c.low).reduce((a, b) => min(a, b));
+    double maxPrice = candles.map((c) => c.high).reduce((a, b) => max(a, b));
     double range = maxPrice - minPrice == 0 ? 1 : maxPrice - minPrice;
 
     double candleWidth = (size.width / candles.length) * 0.65;

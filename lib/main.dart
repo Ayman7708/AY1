@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,7 +17,7 @@ class Ayman7708App extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Ayman7708 Trading Bot',
+      title: 'Ayman7708 Trading Bot Pro',
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -56,6 +58,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   double _marketAdaptiveFactor = 1.0; 
   Map<String, dynamic>? _topGuaranteedTrade;
+  bool _isBannerDismissed = false;
+  String _lastDismissedCoinId = '';
+
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
@@ -63,6 +69,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _tabController = TabController(length: 6, vsync: this);
     _loadSavedData();
     fetchLiveMarketData();
+
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      fetchLiveMarketData(isSilent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSavedData() async {
@@ -95,8 +112,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     await prefs.setString('binance_secret', _binanceApiSecret);
   }
 
-  Future<void> fetchLiveMarketData() async {
-    setState(() => _isLoading = true);
+  Future<void> fetchLiveMarketData({bool isSilent = false}) async {
+    if (!isSilent && _cryptoList.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+
     final url = Uri.parse(
         'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true');
 
@@ -104,18 +124,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        setState(() {
-          _cryptoList = data;
-          _isLoading = false;
-        });
-        _updateMarketAdaptiveEngine();
-        _scanForGuaranteedTrades();
-        _processAutoTradingEngine();
+        if (mounted) {
+          setState(() {
+            _cryptoList = data;
+            _isLoading = false;
+          });
+          _updateMarketAdaptiveEngine();
+          _scanForGuaranteedTrades();
+          _processAutoTradingEngine();
+        }
       } else {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -153,11 +175,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
 
     if (bestCoin != null) {
+      String newCoinId = bestCoin['id'].toString();
       setState(() {
         _topGuaranteedTrade = {
           'coin': bestCoin,
           'winRate': maxWinRate,
         };
+        if (newCoinId != _lastDismissedCoinId) {
+          _isBannerDismissed = false;
+        }
       });
     }
   }
@@ -174,6 +200,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (baseRate > 96.0) return 96.0;
     if (baseRate < 50.0) return 50.0;
     return double.parse(baseRate.toStringAsFixed(1));
+  }
+
+  double calculateRSI(dynamic coin) {
+    double change24 = ((coin['price_change_percentage_24h'] ?? 0) as num).toDouble();
+    double baseRsi = 50.0 + (change24 * 2.2);
+    if (baseRsi > 92.0) return 92.0;
+    if (baseRsi < 12.0) return 12.0;
+    return double.parse(baseRsi.toStringAsFixed(1));
   }
 
   void _processAutoTradingEngine() {
@@ -344,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 _saveData();
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('تم فتح صفقة يدوية لـ ${coin['name']} (نسبة النجاح: $winRate%) بنجاح! 🚀'), backgroundColor: Colors.green),
+                  SnackBar(content: Text('تم فتح صفقة يدوية لـ ${coin['name']} بنجاح! 🚀'), backgroundColor: Colors.green),
                 );
               },
               child: const Text('تأكيد وفتح الصفقة ⚡', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -377,7 +411,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('قم بإدخال مفاتيح API الخاصة بحسابك في بينانس لتمكين التداول الحقيقي:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const Text('قم بإدخال مفاتيح API الخاصة بحسابك لتمكين التداول الحقيقي:', style: TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 12),
                     TextField(
                       controller: keyCtrl,
@@ -431,25 +465,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  double calculateRSI(dynamic coin) {
-    double change24 = ((coin['price_change_percentage_24h'] ?? 0) as num).toDouble();
-    double baseRsi = 50.0 + (change24 * 2.2);
-    if (baseRsi > 92.0) return 92.0;
-    if (baseRsi < 12.0) return 12.0;
-    return double.parse(baseRsi.toStringAsFixed(1));
+  void _closeTrade(Map<String, dynamic> trade, bool isWin, {required double closePrice}) {
+    setState(() {
+      _activeTrades.removeWhere((t) => t == trade);
+      double entry = (trade['entryPrice'] as num).toDouble();
+      double leverage = ((trade['leverage'] ?? 50.0) as num).toDouble();
+      
+      // حساب PNL الفعلي بناء على حركة السعر والرافعة المالية
+      double priceDiffRatio = (closePrice - entry) / entry;
+      double pnl = priceDiffRatio * 100 * leverage;
+
+      _tradeHistory.add({
+        ...trade,
+        'isWin': isWin,
+        'closePrice': closePrice,
+        'pnlPercent': pnl,
+      });
+    });
+    _saveData();
   }
 
-  void _closeTrade(Map<String, dynamic> trade, bool isWin, {required double closePrice}) {
-    _activeTrades.removeWhere((t) => t == trade);
-    double entry = (trade['entryPrice'] as num).toDouble();
-    double leverage = ((trade['leverage'] ?? 50.0) as num).toDouble();
-    double pnl = (((closePrice - entry) / entry) * 100) * leverage;
-
-    _tradeHistory.add({
-      ...trade,
-      'isWin': isWin,
-      'closePrice': closePrice,
-      'pnlPercent': pnl,
+  void _clearHistory() {
+    setState(() {
+      _tradeHistory.clear();
     });
     _saveData();
   }
@@ -481,7 +519,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.amberAccent),
-            onPressed: fetchLiveMarketData,
+            onPressed: () => fetchLiveMarketData(),
           ),
         ],
         bottom: TabBar(
@@ -504,12 +542,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ? const Center(child: CircularProgressIndicator(color: Colors.amberAccent))
           : Column(
               children: [
-                if (_topGuaranteedTrade != null) _buildGuaranteedBanner(),
+                if (_topGuaranteedTrade != null && !_isBannerDismissed) _buildDismissibleGuaranteedBanner(),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      InteractiveChartTab(cryptoList: _cryptoList),
+                      InteractiveCandleChartTab(cryptoList: _cryptoList),
                       _buildActiveTradesProView(),
                       _buildPerformanceStatsProView(),
                       _buildScalpingView(),
@@ -523,36 +561,47 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildGuaranteedBanner() {
+  Widget _buildDismissibleGuaranteedBanner() {
     final coin = _topGuaranteedTrade!['coin'];
     final double winRate = _topGuaranteedTrade!['winRate'];
+    final String coinId = coin['id'].toString();
 
-    return Container(
-      width: double.infinity,
-      color: Colors.green.shade900.withOpacity(0.9),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.stars, color: Colors.amberAccent, size: 22),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('صفقة مضمونة عالية النسبة: ${coin['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
-                  Text('نسبة النجاح المتوقعة: $winRate% 🔥', style: const TextStyle(fontSize: 11, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ],
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amberAccent, minimumSize: const Size(80, 30)),
-            onPressed: () => _openManualTradeDialog(coin),
-            child: const Text('دخول مكثف ⚡', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-          ),
-        ],
+    return Dismissible(
+      key: Key('guaranteed_banner_$coinId'),
+      direction: DismissDirection.horizontal,
+      onDismissed: (direction) {
+        setState(() {
+          _isBannerDismissed = true;
+          _lastDismissedCoinId = coinId;
+        });
+      },
+      child: Container(
+        width: double.infinity,
+        color: Colors.green.shade900.withOpacity(0.95),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.stars, color: Colors.amberAccent, size: 22),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('صفقة مضمونة عالية النسبة: ${coin['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                    Text('نسبة النجاح المتوقعة: $winRate% 🔥 (اسحب للإلغاء)', style: const TextStyle(fontSize: 10, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ],
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amberAccent, minimumSize: const Size(80, 30)),
+              onPressed: () => _openManualTradeDialog(coin),
+              child: const Text('دخول مكثف ⚡', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -707,7 +756,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Widget _buildPerformanceStatsProView() {
     int totalTrades = _tradeHistory.length;
-    int wins = _tradeHistory.where((t) => t['isWin'] == true).length;
+    int wins = _tradeHistory.where((t) => t['isWin'] == true || (t['pnlPercent'] != null && (t['pnlPercent'] as num) > 0)).length;
     int losses = totalTrades - wins;
     double accuracyRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0.0;
 
@@ -716,7 +765,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📊 دقة التطبيق والنتائج التاريخية التراكمية:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('📊 دقة التطبيق والنتائج التراكمية:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+              if (_tradeHistory.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                  onPressed: _clearHistory,
+                  tooltip: 'مسح السجل',
+                ),
+            ],
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -749,8 +809,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   itemCount: _tradeHistory.reversed.length,
                   itemBuilder: (context, idx) {
                     final t = _tradeHistory.reversed.toList()[idx];
-                    bool isWin = t['isWin'] == true;
-                    double pnl = (t['pnlPercent'] as num).toDouble();
+                    double pnl = ((t['pnlPercent'] ?? 0.0) as num).toDouble();
+                    bool isWin = t['isWin'] == true || pnl > 0;
 
                     return Card(
                       color: const Color(0xFF151922),
@@ -935,17 +995,102 @@ class _DeepSearchTabState extends State<DeepSearchTab> {
   }
 }
 
-class InteractiveChartTab extends StatefulWidget {
-  final List<dynamic> cryptoList;
-  const InteractiveChartTab({super.key, required this.cryptoList});
+class CandleData {
+  final double open;
+  final double high;
+  final double low;
+  final double close;
 
-  @override
-  State<InteractiveChartTab> createState() => _InteractiveChartTabState();
+  CandleData({required this.open, required this.high, required this.low, required this.close});
 }
 
-class _InteractiveChartTabState extends State<InteractiveChartTab> {
+class InteractiveCandleChartTab extends StatefulWidget {
+  final List<dynamic> cryptoList;
+  const InteractiveCandleChartTab({super.key, required this.cryptoList});
+
+  @override
+  State<InteractiveCandleChartTab> createState() => _InteractiveCandleChartTabState();
+}
+
+class _InteractiveCandleChartTabState extends State<InteractiveCandleChartTab> {
   String _selectedSymbol = 'bitcoin';
-  String _selectedTimeframe = '1h';
+  String _selectedTimeframe = '1m';
+
+  Timer? _countdownTimer;
+  int _secondsRemaining = 60;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    int totalSeconds = _getTimeframeInSeconds(_selectedTimeframe);
+    
+    int nowSeconds = DateTime.now().second + (DateTime.now().minute * 60);
+    _secondsRemaining = totalSeconds - (nowSeconds % totalSeconds);
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          if (_secondsRemaining > 1) {
+            _secondsRemaining--;
+          } else {
+            _secondsRemaining = _getTimeframeInSeconds(_selectedTimeframe);
+          }
+        });
+      }
+    });
+  }
+
+  int _getTimeframeInSeconds(String tf) {
+    switch (tf) {
+      case '1m': return 60;
+      case '5m': return 300;
+      case '15m': return 900;
+      case '1h': return 3600;
+      case '4h': return 14400;
+      case '1d': return 86400;
+      default: return 60;
+    }
+  }
+
+  String _formatTimer(int seconds) {
+    int m = seconds ~/ 60;
+    int s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  List<CandleData> _generateCandlesFromSparkline(List rawPrices) {
+    if (rawPrices.isEmpty) return [];
+
+    List<CandleData> candles = [];
+    int chunkSize = (rawPrices.length / 25).ceil();
+    if (chunkSize < 1) chunkSize = 1;
+
+    for (int i = 0; i < rawPrices.length; i += chunkSize) {
+      int end = (i + chunkSize < rawPrices.length) ? i + chunkSize : rawPrices.length;
+      List subList = rawPrices.sublist(i, end);
+
+      if (subList.isNotEmpty) {
+        double open = subList.first.toDouble();
+        double close = subList.last.toDouble();
+        double high = subList.map((e) => e.toDouble()).reduce(max);
+        double low = subList.map((e) => e.toDouble()).reduce(min);
+
+        candles.add(CandleData(open: open, high: high, low: low, close: close));
+      }
+    }
+    return candles;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -954,7 +1099,8 @@ class _InteractiveChartTabState extends State<InteractiveChartTab> {
     }
 
     final coin = widget.cryptoList.firstWhere((c) => c['id'] == _selectedSymbol, orElse: () => widget.cryptoList.first);
-    final List sparkline = coin['sparkline_in_7d']?['price'] ?? [];
+    final List rawSparkline = coin['sparkline_in_7d']?['price'] ?? [];
+    final List<CandleData> candles = _generateCandlesFromSparkline(rawSparkline);
 
     return Padding(
       padding: const EdgeInsets.all(12.0),
@@ -980,7 +1126,12 @@ class _InteractiveChartTabState extends State<InteractiveChartTab> {
                 children: ['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) {
                   bool isSelected = _selectedTimeframe == tf;
                   return GestureDetector(
-                    onTap: () => setState(() => _selectedTimeframe = tf),
+                    onTap: () {
+                      setState(() {
+                        _selectedTimeframe = tf;
+                        _startCountdown();
+                      });
+                    },
                     child: Container(
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -995,7 +1146,28 @@ class _InteractiveChartTabState extends State<InteractiveChartTab> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(color: const Color(0xFF151922), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amberAccent.withOpacity(0.3))),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.timer_outlined, color: Colors.amberAccent, size: 16),
+                    const SizedBox(width: 6),
+                    Text('إغلاق الشمعة الحالية ($_selectedTimeframe):', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+                Text(
+                  _formatTimer(_secondsRemaining),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.amberAccent, fontFamily: 'monospace'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(12),
@@ -1006,7 +1178,7 @@ class _InteractiveChartTabState extends State<InteractiveChartTab> {
               ),
               child: CustomPaint(
                 size: Size.infinite,
-                painter: AdvancedChartPainter(sparkline),
+                painter: ProfessionalCandlePainter(candles),
               ),
             ),
           ),
@@ -1016,37 +1188,54 @@ class _InteractiveChartTabState extends State<InteractiveChartTab> {
   }
 }
 
-class AdvancedChartPainter extends CustomPainter {
-  final List sparkline;
-  AdvancedChartPainter(this.sparkline);
+class ProfessionalCandlePainter extends CustomPainter {
+  final List<CandleData> candles;
+  ProfessionalCandlePainter(this.candles);
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (sparkline.isEmpty) return;
+    if (candles.isEmpty) return;
 
-    final paintLine = Paint()
-      ..color = Colors.greenAccent
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke;
+    double minPrice = candles.map((c) => c.low).reduce(min);
+    double maxPrice = candles.map((c) => c.high).reduce(max);
+    double range = maxPrice - minPrice == 0 ? 1 : maxPrice - minPrice;
 
-    final double min = sparkline.reduce((a, b) => a < b ? a : b).toDouble();
-    final double max = sparkline.reduce((a, b) => a > b ? a : b).toDouble();
-    final double range = max - min == 0 ? 1 : max - min;
+    double candleWidth = (size.width / candles.length) * 0.65;
+    double space = size.width / candles.length;
 
-    final path = Path();
-    double dx = size.width / (sparkline.length - 1);
+    for (int i = 0; i < candles.length; i++) {
+      CandleData c = candles[i];
+      bool isGreen = c.close >= c.open;
+      Color candleColor = isGreen ? const Color(0xFF00E676) : const Color(0xFFFF5252);
 
-    for (int i = 0; i < sparkline.length; i++) {
-      double val = sparkline[i].toDouble();
-      double dy = size.height - ((val - min) / range * size.height);
-      if (i == 0) {
-        path.moveTo(0, dy);
-      } else {
-        path.lineTo(i * dx, dy);
-      }
+      double x = (i * space) + (space / 2);
+
+      double openY = size.height - ((c.open - minPrice) / range * size.height);
+      double closeY = size.height - ((c.close - minPrice) / range * size.height);
+      double highY = size.height - ((c.high - minPrice) / range * size.height);
+      double lowY = size.height - ((c.low - minPrice) / range * size.height);
+
+      final wickPaint = Paint()
+        ..color = candleColor
+        ..strokeWidth = 1.2;
+      canvas.drawLine(Offset(x, highY), Offset(x, lowY), wickPaint);
+
+      final bodyPaint = Paint()
+        ..color = candleColor
+        ..style = PaintingStyle.fill;
+
+      double top = min(openY, closeY);
+      double bottom = max(openY, closeY);
+      double bodyHeight = max(bottom - top, 2.0);
+
+      Rect bodyRect = Rect.fromCenter(
+        center: Offset(x, top + (bodyHeight / 2)),
+        width: candleWidth,
+        height: bodyHeight,
+      );
+
+      canvas.drawRect(bodyRect, bodyPaint);
     }
-
-    canvas.drawPath(path, paintLine);
   }
 
   @override

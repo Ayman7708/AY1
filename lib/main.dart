@@ -41,6 +41,7 @@ class MainHomeScreen extends StatefulWidget {
 
 class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  int _bottomNavIndex = 0;
   bool _isAutoTradingEnabled = true;
   bool _isDemoMode = true;
 
@@ -54,7 +55,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     _tabController = TabController(length: 3, vsync: this);
     _loadInitialData();
 
-    // تحديث البيانات تلقائياً
     _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       _updateLivePrices();
     });
@@ -92,7 +92,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
           'tp2': 571.952,
           'tp3': 580.906,
           'trailingStop': 555.7225,
-          'pnl': -2.8,
+          'pnl': -0.4,
         },
         {
           'id': 'ada',
@@ -104,7 +104,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
           'tp2': 0.279,
           'tp3': 0.283,
           'trailingStop': 0.2711,
-          'pnl': -8.9,
+          'pnl': -1.2,
         },
       ];
     });
@@ -164,51 +164,53 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
             ),
           ],
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.amber,
-          labelColor: Colors.amber,
-          unselectedLabelColor: Colors.grey,
-          tabs: [
-            Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('صفقاتي النشطة', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: const BoxDecoration(color: Colors.amber, shape: BoxShape.circle),
-                    child: Text(
-                      '${_activeTrades.length}',
-                      style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+        bottom: _bottomNavIndex == 0
+            ? TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.amber,
+                labelColor: Colors.amber,
+                unselectedLabelColor: Colors.grey,
+                tabs: [
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('صفقاتي النشطة', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: const BoxDecoration(color: Colors.amber, shape: BoxShape.circle),
+                          child: Text(
+                            '${_activeTrades.length}',
+                            style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('سجل وأرباح الصفقات'),
+                        SizedBox(width: 4),
+                        Icon(Icons.bar_chart, size: 16),
+                      ],
+                    ),
+                  ),
+                  const Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('الصفقات المتاحة'),
+                        SizedBox(width: 4),
+                        Icon(Icons.search, size: 16),
+                      ],
                     ),
                   ),
                 ],
-              ),
-            ),
-            const Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('سجل وأرباح الصفقات'),
-                  SizedBox(width: 4),
-                  Icon(Icons.bar_chart, size: 16),
-                ],
-              ),
-            ),
-            const Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('صفقات المتاحة'),
-                  SizedBox(width: 4),
-                  Icon(Icons.search, size: 16),
-                ],
-              ),
-            ),
-          ],
-        ),
+              )
+            : null,
       ),
       body: Column(
         children: [
@@ -267,14 +269,49 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 6),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
+            child: IndexedStack(
+              index: _bottomNavIndex,
               children: [
-                _buildActiveTradesTab(),
-                _buildHistoryTab(),
-                const Center(child: Text('قائمة الصفقات المتاحة للفتح', style: TextStyle(color: Colors.grey))),
+                // الصفحة 0: التداول الآلي والصفقات النشطة + التبويبات الثلاثة
+                TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildActiveTradesTab(),
+                    _buildHistoryTab(),
+                    _buildAvailableTradesTab(),
+                  ],
+                ),
+                // الصفحة 1: عقود الإشارات السريعة (Futures Scalper)
+                _buildScalperTab(),
+                // الصفحة 2: الإعدادات وإدارة الحساب
+                _buildSettingsTab(),
               ],
             ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _bottomNavIndex,
+        onTap: (index) {
+          setState(() {
+            _bottomNavIndex = index;
+          });
+        },
+        backgroundColor: const Color(0xFF161C28),
+        selectedItemColor: Colors.amber,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.smart_toy),
+            label: 'التداول الآلي',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.flash_on),
+            label: 'عقود 60M',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'الإعدادات',
           ),
         ],
       ),
@@ -432,15 +469,135 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     return _tradeHistory.isEmpty
         ? const Center(child: Text('لا يوجد سجل صفقات مغلقة حتى الآن', style: TextStyle(color: Colors.grey)))
         : ListView.builder(
+            padding: const EdgeInsets.all(12),
             itemCount: _tradeHistory.length,
             itemBuilder: (context, index) {
               final t = _tradeHistory[index];
-              return ListTile(
-                title: Text(t['symbol'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: Text('تاريخ الإغلاق: ${t['closeTime']}', style: const TextStyle(color: Colors.grey, fontSize: 10)),
-                trailing: const Text('مغلقة', style: TextStyle(color: Colors.redAccent)),
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161C28),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('مغلقة', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(t['symbol'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        Text('التاريخ: ${t['closeTime'].toString().split(".")[0]}', style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                      ],
+                    ),
+                  ],
+                ),
               );
             },
           );
+  }
+
+  Widget _buildAvailableTradesTab() {
+    final available = [
+      {'symbol': 'Solana (SOL)', 'price': 142.50, 'signal': 'شراء STRONG BUY'},
+      {'symbol': 'Bitcoin (BTC)', 'price': 63200.0, 'signal': 'انتظار WAITING'},
+      {'symbol': 'Ethereum (ETH)', 'price': 2650.0, 'signal': 'شراء BUY'},
+    ];
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: available.length,
+      itemBuilder: (context, index) {
+        final item = available[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161C28),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+                onPressed: () {},
+                child: const Text('دخول تلقائي', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(item['symbol'].toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text('السعر: \$${item['price']}', style: const TextStyle(color: Colors.amber, fontSize: 12)),
+                  Text(item['signal'].toString(), style: const TextStyle(color: Colors.greenAccent, fontSize: 10)),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildScalperTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF161C28),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: const [
+                Column(children: [Text('216', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)), Text('الإجمالي', style: TextStyle(color: Colors.grey, fontSize: 11))]),
+                Column(children: [Text('99', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16)), Text('الرابحة', style: TextStyle(color: Colors.grey, fontSize: 11))]),
+                Column(children: [Text('117', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16)), Text('الخاسرة', style: TextStyle(color: Colors.grey, fontSize: 11))]),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF161C28),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Column(
+              children: [
+                Text('نسبة دقة إشارات العقود الآجلة السريعة:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                SizedBox(height: 4),
+                Text('45.8%', style: TextStyle(color: Colors.amber, fontSize: 24, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SwitchListTile(
+          title: const Text('التداول التلقائي الفوري', style: TextStyle(color: Colors.white)),
+          value: _isAutoTradingEnabled,
+          activeColor: Colors.amber,
+          onChanged: (val) => setState(() => _isAutoTradingEnabled = val),
+        ),
+        SwitchListTile(
+          title: const Text('وضع الحساب التجريبي (Demo)', style: TextStyle(color: Colors.white)),
+          value: _isDemoMode,
+          activeColor: Colors.amber,
+          onChanged: (val) => setState(() => _isDemoMode = val),
+        ),
+      ],
+    );
   }
 }

@@ -1,8 +1,5 @@
-// import 'dart:async';
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,7 +45,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
   bool _isDemoMode = true;
 
   List<Map<String, dynamic>> _activeTrades = [];
-  List<Map<String, dynamic>> _tradeHistory = [];
+  final List<Map<String, dynamic>> _tradeHistory = [];
   Timer? _refreshTimer;
 
   @override
@@ -70,13 +67,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     super.dispose();
   }
 
-  Future<void> _loadInitialData() async {
-    final prefs = await SharedPreferences.getInstance();
+  void _loadInitialData() {
     setState(() {
-      _isAutoTradingEnabled = prefs.getBool('auto_trading') ?? true;
-      _isDemoMode = prefs.getBool('demo_mode') ?? true;
-
-      // صفقات تجريبية مطابقة للتصميم لتشغيل الواجهة فوراً
       _activeTrades = [
         {
           'id': 'hype',
@@ -121,13 +113,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
   void _updateLivePrices() {
     if (_activeTrades.isEmpty) return;
     setState(() {
-      // محاكاة تحرك الأسعار والـ Trailing Stop
       for (var trade in _activeTrades) {
         double entry = (trade['entryPrice'] as num).toDouble();
         double current = (trade['currentPrice'] as num).toDouble();
-        
-        // حساب نسبة PnL
-        double pnl = ((current - entry) / entry) * 100 * 10; 
+        double pnl = ((current - entry) / entry) * 100 * 10;
         trade['pnl'] = double.parse(pnl.toStringAsFixed(1));
       }
     });
@@ -223,14 +212,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
       ),
       body: Column(
         children: [
-          // شريط الحالة العلوي (التداول الآلي + نوع الحساب)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: const Color(0xFF161C28),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // زر التبديل بين التجريبي والحقيقي
                 InkWell(
                   onTap: () {
                     setState(() => _isDemoMode = !_isDemoMode);
@@ -246,7 +233,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                     ],
                   ),
                 ),
-                // حالة التداول الآلي
                 InkWell(
                   onTap: () {
                     setState(() => _isAutoTradingEnabled = !_isAutoTradingEnabled);
@@ -280,7 +266,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
             ),
           ),
           const SizedBox(height: 6),
-          // عرض محتوى التبويبات
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -296,7 +281,938 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     );
   }
 
-  // تبويب الصفقات النشطة المطابق للصورة
+  Widget _buildActiveTradesTab() {
+    if (_activeTrades.isEmpty) {
+      return const Center(
+        child: Text('لا توجد صفقات نشطة حالياً', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      itemCount: _activeTrades.length,
+      itemBuilder: (context, index) {
+        final trade = _activeTrades[index];
+        final double pnl = (trade['pnl'] as num).toDouble();
+        final bool isProfit = pnl >= 0;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161C28),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+
+
+
+
+
+cd ~/AY1 && cat << 'EOF' > lib/main.dart
+import 'dart:async';
+import 'package:flutter/material.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const AymanTradingBotApp());
+}
+
+class AymanTradingBotApp extends StatelessWidget {
+  const AymanTradingBotApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Ayman7708 Trading Bot',
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child!,
+        );
+      },
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0F131C),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF161C28),
+          elevation: 0,
+        ),
+      ),
+      home: const MainHomeScreen(),
+    );
+  }
+}
+
+class MainHomeScreen extends StatefulWidget {
+  const MainHomeScreen({super.key});
+
+  @override
+  State<MainHomeScreen> createState() => _MainHomeScreenState();
+}
+
+class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  bool _isAutoTradingEnabled = true;
+  bool _isDemoMode = true;
+
+  List<Map<String, dynamic>> _activeTrades = [];
+  final List<Map<String, dynamic>> _tradeHistory = [];
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadInitialData();
+
+    // تحديث البيانات تلقائياً
+    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _updateLivePrices();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _loadInitialData() {
+    setState(() {
+      _activeTrades = [
+        {
+          'id': 'hype',
+          'symbol': 'Hyperliquid (HYPE)',
+          'wave': 1,
+          'entryPrice': 94.98,
+          'currentPrice': 94.98,
+          'tp1': 95.930,
+          'tp2': 97.070,
+          'tp3': 98.589,
+          'trailingStop': 94.3151,
+          'pnl': 0.0,
+        },
+        {
+          'id': 'xmr',
+          'symbol': 'Monero (XMR)',
+          'wave': 1,
+          'entryPrice': 559.64,
+          'currentPrice': 559.4300,
+          'tp1': 565.236,
+          'tp2': 571.952,
+          'tp3': 580.906,
+          'trailingStop': 555.7225,
+          'pnl': -2.8,
+        },
+        {
+          'id': 'ada',
+          'symbol': 'Cardano (ADA)',
+          'wave': 1,
+          'entryPrice': 0.273022,
+          'currentPrice': 0.2727,
+          'tp1': 0.276,
+          'tp2': 0.279,
+          'tp3': 0.283,
+          'trailingStop': 0.2711,
+          'pnl': -8.9,
+        },
+      ];
+    });
+  }
+
+  void _updateLivePrices() {
+    if (_activeTrades.isEmpty) return;
+    setState(() {
+      for (var trade in _activeTrades) {
+        double entry = (trade['entryPrice'] as num).toDouble();
+        double current = (trade['currentPrice'] as num).toDouble();
+        double pnl = ((current - entry) / entry) * 100 * 10;
+        trade['pnl'] = double.parse(pnl.toStringAsFixed(1));
+      }
+    });
+  }
+
+  void _closeTradeManual(Map<String, dynamic> trade) {
+    setState(() {
+      _activeTrades.removeWhere((t) => t['id'] == trade['id']);
+      _tradeHistory.add({...trade, 'closeTime': DateTime.now().toString()});
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تم إغلاق صفقة ${trade['symbol']} فورياً بنجاح'),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.amber),
+                  onPressed: _updateLivePrices,
+                ),
+                const Icon(Icons.sensors, color: Colors.amber, size: 20),
+              ],
+            ),
+            Row(
+              children: const [
+                Text(
+                  'Ayman7708 Trading Bot',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                ),
+                SizedBox(width: 6),
+                Icon(Icons.bolt, color: Colors.amber, size: 22),
+              ],
+            ),
+          ],
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.amber,
+          labelColor: Colors.amber,
+          unselectedLabelColor: Colors.grey,
+          tabs: [
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('صفقاتي النشطة', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(color: Colors.amber, shape: BoxShape.circle),
+                    child: Text(
+                      '${_activeTrades.length}',
+                      style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('سجل وأرباح الصفقات'),
+                  SizedBox(width: 4),
+                  Icon(Icons.bar_chart, size: 16),
+                ],
+              ),
+            ),
+            const Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('صفقات المتاحة'),
+                  SizedBox(width: 4),
+                  Icon(Icons.search, size: 16),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: const Color(0xFF161C28),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() => _isDemoMode = !_isDemoMode);
+                  },
+                  child: Row(
+                    children: [
+                      Icon(_isDemoMode ? Icons.circle : Icons.check_circle, color: Colors.amber, size: 12),
+                      const SizedBox(width: 6),
+                      Text(
+                        'نوع التداول: ${_isDemoMode ? "(Demo) تجريبي" : "حقيقي"}',
+                        style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    setState(() => _isAutoTradingEnabled = !_isAutoTradingEnabled);
+                  },
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.power_settings_new,
+                        color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'التداول الآلي ${_isAutoTradingEnabled ? "شغال" : "متوقف"}',
+                        style: TextStyle(
+                          color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.circle,
+                        color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                        size: 8,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildActiveTradesTab(),
+                _buildHistoryTab(),
+                const Center(child: Text('قائمة الصفقات المتاحة للفتح', style: TextStyle(color: Colors.grey))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveTradesTab() {
+    if (_activeTrades.isEmpty) {
+      return const Center(
+        child: Text('لا توجد صفقات نشطة حالياً', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      itemCount: _activeTrades.length,
+      itemBuilder: (context, index) {
+        final trade = _activeTrades[index];
+        final double pnl = (trade['pnl'] as num).toDouble();
+        final bool isProfit = pnl >= 0;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161C28),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+
+cd ~/AY1 && cat << 'EOF' > lib/main.dart
+import 'dart:async';
+import 'package:flutter/material.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const AymanTradingBotApp());
+}
+
+class AymanTradingBotApp extends StatelessWidget {
+  const AymanTradingBotApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Ayman7708 Trading Bot',
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child!,
+        );
+      },
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0F131C),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF161C28),
+          elevation: 0,
+        ),
+      ),
+      home: const MainHomeScreen(),
+    );
+  }
+}
+
+class MainHomeScreen extends StatefulWidget {
+  const MainHomeScreen({super.key});
+
+  @override
+  State<MainHomeScreen> createState() => _MainHomeScreenState();
+}
+
+class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  bool _isAutoTradingEnabled = true;
+  bool _isDemoMode = true;
+
+  List<Map<String, dynamic>> _activeTrades = [];
+  final List<Map<String, dynamic>> _tradeHistory = [];
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadInitialData();
+
+    // تحديث البيانات تلقائياً
+    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _updateLivePrices();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _loadInitialData() {
+    setState(() {
+      _activeTrades = [
+        {
+          'id': 'hype',
+          'symbol': 'Hyperliquid (HYPE)',
+          'wave': 1,
+          'entryPrice': 94.98,
+          'currentPrice': 94.98,
+          'tp1': 95.930,
+          'tp2': 97.070,
+          'tp3': 98.589,
+          'trailingStop': 94.3151,
+          'pnl': 0.0,
+        },
+        {
+          'id': 'xmr',
+          'symbol': 'Monero (XMR)',
+          'wave': 1,
+          'entryPrice': 559.64,
+          'currentPrice': 559.4300,
+          'tp1': 565.236,
+          'tp2': 571.952,
+          'tp3': 580.906,
+          'trailingStop': 555.7225,
+          'pnl': -2.8,
+        },
+        {
+          'id': 'ada',
+          'symbol': 'Cardano (ADA)',
+          'wave': 1,
+          'entryPrice': 0.273022,
+          'currentPrice': 0.2727,
+          'tp1': 0.276,
+          'tp2': 0.279,
+          'tp3': 0.283,
+          'trailingStop': 0.2711,
+          'pnl': -8.9,
+        },
+      ];
+    });
+  }
+
+  void _updateLivePrices() {
+    if (_activeTrades.isEmpty) return;
+    setState(() {
+      for (var trade in _activeTrades) {
+        double entry = (trade['entryPrice'] as num).toDouble();
+        double current = (trade['currentPrice'] as num).toDouble();
+        double pnl = ((current - entry) / entry) * 100 * 10;
+        trade['pnl'] = double.parse(pnl.toStringAsFixed(1));
+      }
+    });
+  }
+
+  void _closeTradeManual(Map<String, dynamic> trade) {
+    setState(() {
+      _activeTrades.removeWhere((t) => t['id'] == trade['id']);
+      _tradeHistory.add({...trade, 'closeTime': DateTime.now().toString()});
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تم إغلاق صفقة ${trade['symbol']} فورياً بنجاح'),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.amber),
+                  onPressed: _updateLivePrices,
+                ),
+                const Icon(Icons.sensors, color: Colors.amber, size: 20),
+              ],
+            ),
+            Row(
+              children: const [
+                Text(
+                  'Ayman7708 Trading Bot',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                ),
+                SizedBox(width: 6),
+                Icon(Icons.bolt, color: Colors.amber, size: 22),
+              ],
+            ),
+          ],
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.amber,
+          labelColor: Colors.amber,
+          unselectedLabelColor: Colors.grey,
+          tabs: [
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('صفقاتي النشطة', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(color: Colors.amber, shape: BoxShape.circle),
+                    child: Text(
+                      '${_activeTrades.length}',
+                      style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('سجل وأرباح الصفقات'),
+                  SizedBox(width: 4),
+                  Icon(Icons.bar_chart, size: 16),
+                ],
+              ),
+            ),
+            const Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('صفقات المتاحة'),
+                  SizedBox(width: 4),
+                  Icon(Icons.search, size: 16),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: const Color(0xFF161C28),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() => _isDemoMode = !_isDemoMode);
+                  },
+                  child: Row(
+                    children: [
+                      Icon(_isDemoMode ? Icons.circle : Icons.check_circle, color: Colors.amber, size: 12),
+                      const SizedBox(width: 6),
+                      Text(
+                        'نوع التداول: ${_isDemoMode ? "(Demo) تجريبي" : "حقيقي"}',
+                        style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    setState(() => _isAutoTradingEnabled = !_isAutoTradingEnabled);
+                  },
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.power_settings_new,
+                        color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'التداول الآلي ${_isAutoTradingEnabled ? "شغال" : "متوقف"}',
+                        style: TextStyle(
+                          color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.circle,
+                        color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                        size: 8,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildActiveTradesTab(),
+                _buildHistoryTab(),
+                const Center(child: Text('قائمة الصفقات المتاحة للفتح', style: TextStyle(color: Colors.grey))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveTradesTab() {
+    if (_activeTrades.isEmpty) {
+      return const Center(
+        child: Text('لا توجد صفقات نشطة حالياً', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      itemCount: _activeTrades.length,
+      itemBuilder: (context, index) {
+        final trade = _activeTrades[index];
+        final double pnl = (trade['pnl'] as num).toDouble();
+        final bool isProfit = pnl >= 0;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161C28),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+
+
+cd ~/AY1 && cat << 'EOF' > lib/main.dart
+import 'dart:async';
+import 'package:flutter/material.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const AymanTradingBotApp());
+}
+
+class AymanTradingBotApp extends StatelessWidget {
+  const AymanTradingBotApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Ayman7708 Trading Bot',
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child!,
+        );
+      },
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0F131C),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF161C28),
+          elevation: 0,
+        ),
+      ),
+      home: const MainHomeScreen(),
+    );
+  }
+}
+
+class MainHomeScreen extends StatefulWidget {
+  const MainHomeScreen({super.key});
+
+  @override
+  State<MainHomeScreen> createState() => _MainHomeScreenState();
+}
+
+class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  bool _isAutoTradingEnabled = true;
+  bool _isDemoMode = true;
+
+  List<Map<String, dynamic>> _activeTrades = [];
+  final List<Map<String, dynamic>> _tradeHistory = [];
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadInitialData();
+
+    // تحديث البيانات تلقائياً
+    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _updateLivePrices();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _loadInitialData() {
+    setState(() {
+      _activeTrades = [
+        {
+          'id': 'hype',
+          'symbol': 'Hyperliquid (HYPE)',
+          'wave': 1,
+          'entryPrice': 94.98,
+          'currentPrice': 94.98,
+          'tp1': 95.930,
+          'tp2': 97.070,
+          'tp3': 98.589,
+          'trailingStop': 94.3151,
+          'pnl': 0.0,
+        },
+        {
+          'id': 'xmr',
+          'symbol': 'Monero (XMR)',
+          'wave': 1,
+          'entryPrice': 559.64,
+          'currentPrice': 559.4300,
+          'tp1': 565.236,
+          'tp2': 571.952,
+          'tp3': 580.906,
+          'trailingStop': 555.7225,
+          'pnl': -2.8,
+        },
+        {
+          'id': 'ada',
+          'symbol': 'Cardano (ADA)',
+          'wave': 1,
+          'entryPrice': 0.273022,
+          'currentPrice': 0.2727,
+          'tp1': 0.276,
+          'tp2': 0.279,
+          'tp3': 0.283,
+          'trailingStop': 0.2711,
+          'pnl': -8.9,
+        },
+      ];
+    });
+  }
+
+  void _updateLivePrices() {
+    if (_activeTrades.isEmpty) return;
+    setState(() {
+      for (var trade in _activeTrades) {
+        double entry = (trade['entryPrice'] as num).toDouble();
+        double current = (trade['currentPrice'] as num).toDouble();
+        double pnl = ((current - entry) / entry) * 100 * 10;
+        trade['pnl'] = double.parse(pnl.toStringAsFixed(1));
+      }
+    });
+  }
+
+  void _closeTradeManual(Map<String, dynamic> trade) {
+    setState(() {
+      _activeTrades.removeWhere((t) => t['id'] == trade['id']);
+      _tradeHistory.add({...trade, 'closeTime': DateTime.now().toString()});
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تم إغلاق صفقة ${trade['symbol']} فورياً بنجاح'),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.amber),
+                  onPressed: _updateLivePrices,
+                ),
+                const Icon(Icons.sensors, color: Colors.amber, size: 20),
+              ],
+            ),
+            Row(
+              children: const [
+                Text(
+                  'Ayman7708 Trading Bot',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                ),
+                SizedBox(width: 6),
+                Icon(Icons.bolt, color: Colors.amber, size: 22),
+              ],
+            ),
+          ],
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.amber,
+          labelColor: Colors.amber,
+          unselectedLabelColor: Colors.grey,
+          tabs: [
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('صفقاتي النشطة', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(color: Colors.amber, shape: BoxShape.circle),
+                    child: Text(
+                      '${_activeTrades.length}',
+                      style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('سجل وأرباح الصفقات'),
+                  SizedBox(width: 4),
+                  Icon(Icons.bar_chart, size: 16),
+                ],
+              ),
+            ),
+            const Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('صفقات المتاحة'),
+                  SizedBox(width: 4),
+                  Icon(Icons.search, size: 16),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: const Color(0xFF161C28),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() => _isDemoMode = !_isDemoMode);
+                  },
+                  child: Row(
+                    children: [
+                      Icon(_isDemoMode ? Icons.circle : Icons.check_circle, color: Colors.amber, size: 12),
+                      const SizedBox(width: 6),
+                      Text(
+                        'نوع التداول: ${_isDemoMode ? "(Demo) تجريبي" : "حقيقي"}',
+                        style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    setState(() => _isAutoTradingEnabled = !_isAutoTradingEnabled);
+                  },
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.power_settings_new,
+                        color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'التداول الآلي ${_isAutoTradingEnabled ? "شغال" : "متوقف"}',
+                        style: TextStyle(
+                          color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.circle,
+                        color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
+                        size: 8,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildActiveTradesTab(),
+                _buildHistoryTab(),
+                const Center(child: Text('قائمة الصفقات المتاحة للفتح', style: TextStyle(color: Colors.grey))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActiveTradesTab() {
     if (_activeTrades.isEmpty) {
       return const Center(
@@ -323,7 +1239,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
             padding: const EdgeInsets.all(12.0),
             child: Column(
               children: [
-                // رأس الكارت: اسم العملة والموجة والربح/الخسارة
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -354,7 +1269,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                   ],
                 ),
                 const SizedBox(height: 8),
-                // أسعار الدخول والحالي
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -369,7 +1283,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                   ],
                 ),
                 const SizedBox(height: 10),
-                // أهداف أخذ الربح الثلاثة (TP1, TP2, TP3)
                 Row(
                   children: [
                     _buildTpItem('TP3 🎯', '\$${trade['tp3']}'),
@@ -380,7 +1293,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                   ],
                 ),
                 const SizedBox(height: 10),
-                // وقف الخسارة المتحرك
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -398,7 +1310,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                   ],
                 ),
                 const SizedBox(height: 12),
-                // زر الإغلاق اليدوي الفوري
                 SizedBox(
                   width: double.infinity,
                   height: 42,
@@ -465,4 +1376,3 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
           );
   }
 }
-

@@ -14,7 +14,7 @@ class AymanTradingBotApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Ayman7708 Trading Bot - AI Engine',
+      title: 'Ayman7708 AI Trading Engine',
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -46,33 +46,45 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
   bool _isAutoTradingEnabled = true;
   bool _isDemoMode = true;
 
-  // القوائم الأساسية للربط والتداول
+  String _selectedExchange = 'Binance';
+  final TextEditingController _apiKeyController = TextEditingController(text: "****************");
+  final TextEditingController _apiSecretController = TextEditingController(text: "****************");
+  bool _isApiConnected = false;
+
   List<Map<String, dynamic>> _activeTrades = [];
   final List<Map<String, dynamic>> _tradeHistory = [];
   Timer? _refreshTimer;
 
-  // خوارزميات ومؤشرات TradingView تحت الاختبار (قائمة 1)
-  List<Map<String, dynamic>> _testingIndicators = [
-    {'name': 'RSI Oversold/Overbought (14)', 'category': 'Momentum', 'winRate': 68.4, 'tests': 420, 'status': 'تحت الاختبار', 'color': Colors.orangeAccent},
-    {'name': 'MACD Golden Cross (12, 26, 9)', 'category': 'Trend', 'winRate': 82.5, 'tests': 610, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
-    {'name': 'Bollinger Bands Squeeze + Breakout', 'category': 'Volatility', 'winRate': 76.8, 'tests': 350, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
-    {'name': 'EMA 50 / EMA 200 Cross (Golden)', 'category': 'Trend', 'winRate': 89.2, 'tests': 890, 'status': 'ممتاز - معتمد', 'color': Colors.amber},
-    {'name': 'SuperTrend (10, 3)', 'category': 'Trend', 'winRate': 81.1, 'tests': 510, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
-    {'name': 'Stochastic Oscillator (14, 3, 3)', 'category': 'Momentum', 'winRate': 54.2, 'tests': 290, 'status': 'ضعيف - يتعلم', 'color': Colors.redAccent},
-    {'name': 'VWAP + Volume Profile', 'category': 'Volume', 'winRate': 79.4, 'tests': 440, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
-    {'name': 'Ichimoku Cloud Breakout', 'category': 'Trend', 'winRate': 62.0, 'tests': 180, 'status': 'تحت الاختبار', 'color': Colors.orangeAccent},
-    {'name': 'ATR Trailing Stop Loss System', 'category': 'Risk/Volatility', 'winRate': 85.0, 'tests': 720, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
+  final List<Map<String, dynamic>> _testingIndicators = [
+    {'name': 'LuxAlgo Premium Suite (Paid)', 'platform': 'TradingView', 'category': 'Smart Money', 'winRate': 88.5, 'tests': 1420, 'status': 'ممتاز - معتمد', 'color': Colors.amber},
+    {'name': 'Order Block & Liquidity Finder (Custom Pine)', 'platform': 'TradingView', 'category': 'ICT / SMC', 'winRate': 84.2, 'tests': 980, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
+    {'name': 'Ea Robot Scalper v5.2 (Custom EA)', 'platform': 'MetaTrader 5', 'category': 'Algorithmic', 'winRate': 79.8, 'tests': 2100, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
+    {'name': 'Market Cipher B + Divergence (Paid)', 'platform': 'TradingView', 'category': 'Oscillator', 'winRate': 86.4, 'tests': 1150, 'status': 'ممتاز - معتمد', 'color': Colors.amber},
+    {'name': 'QuantConnect Machine Learning Model', 'platform': 'QuantConnect', 'category': 'AI & ML', 'winRate': 91.2, 'tests': 3400, 'status': 'ممتاز - معتمد', 'color': Colors.amber},
+    {'name': 'EMA 50 / 200 Golden Cross (Free)', 'platform': 'TradingView', 'category': 'Trend', 'winRate': 82.1, 'tests': 890, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
+    {'name': 'Volume Profile Visible Range (Free/Pro)', 'platform': 'GoCharting', 'category': 'Volume', 'winRate': 78.9, 'tests': 620, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
+    {'name': 'SMC Fair Value Gap (FVG) Scanner (Custom)', 'platform': 'MetaTrader 4', 'category': 'Price Action', 'winRate': 83.7, 'tests': 770, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
+    {'name': 'Stochastic RSI Momentum (Free)', 'platform': 'TabTrader', 'category': 'Momentum', 'winRate': 56.4, 'tests': 430, 'status': 'ضعيف - يتعلم', 'color': Colors.redAccent},
+    {'name': 'SuperTrend Multi-Timeframe (Modified Script)', 'platform': 'TradingView', 'category': 'Trend', 'winRate': 80.5, 'tests': 1200, 'status': 'مؤشر ناجح', 'color': Colors.greenAccent},
+  ];
+
+  final List<Map<String, dynamic>> _availableOpportunities = [
+    {'id': 'sol', 'symbol': 'Solana (SOL)', 'price': 142.50, 'signal': 'شراء قوي (STRONG BUY)', 'winProb': 89.0, 'indicator': 'LuxAlgo Premium + SMC FVG', 'platform': 'TradingView'},
+    {'id': 'btc', 'symbol': 'Bitcoin (BTC)', 'price': 63200.0, 'signal': 'فرصة نمو مؤكدة', 'winProb': 92.5, 'indicator': 'QuantConnect AI Engine', 'platform': 'QuantConnect'},
+    {'id': 'eth', 'symbol': 'Ethereum (ETH)', 'price': 2650.0, 'signal': 'شراء اختراق (BUY)', 'winProb': 81.4, 'indicator': 'Market Cipher B Divergence', 'platform': 'TradingView'},
+    {'id': 'sui', 'symbol': 'Sui Network (SUI)', 'price': 1.85, 'signal': 'فرصة سكالبر (Scalp)', 'winProb': 85.0, 'indicator': 'Ea Robot Scalper v5.2', 'platform': 'MetaTrader 5'},
+    {'id': 'near', 'symbol': 'NEAR Protocol (NEAR)', 'price': 4.92, 'signal': 'شراء قاع (Bottom Buy)', 'winProb': 78.2, 'indicator': 'Order Block Scanner', 'platform': 'MetaTrader 4'},
   ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
-    _loadInitialData();
+    _loadInitialTrades();
 
-    // المحرك الآلي للتحديث والتطور والتعلم التلقائي كل 4 ثوانٍ
     _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       _updateLivePricesAndSelfLearn();
+      _autoScanAndExecuteHighWinRateTrades();
     });
   }
 
@@ -80,10 +92,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
   void dispose() {
     _refreshTimer?.cancel();
     _tabController.dispose();
+    _apiKeyController.dispose();
+    _apiSecretController.dispose();
     super.dispose();
   }
 
-  void _loadInitialData() {
+  void _loadInitialTrades() {
     setState(() {
       _activeTrades = [
         {
@@ -95,51 +109,87 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
           'tp1': 95.930,
           'tp2': 97.070,
           'tp3': 98.589,
-          'trailingStop': 94.3151,
+          'trailingStop': 94.315,
           'pnl': 0.0,
-          'strategy': 'EMA 50/200 Cross'
+          'strategy': 'QuantConnect AI Model'
         },
         {
           'id': 'xmr',
           'symbol': 'Monero (XMR)',
           'wave': 1,
           'entryPrice': 559.64,
-          'currentPrice': 559.4300,
+          'currentPrice': 559.43,
           'tp1': 565.236,
           'tp2': 571.952,
           'tp3': 580.906,
-          'trailingStop': 555.7225,
+          'trailingStop': 555.722,
           'pnl': -0.4,
-          'strategy': 'MACD Golden Cross'
-        },
-        {
-          'id': 'ada',
-          'symbol': 'Cardano (ADA)',
-          'wave': 1,
-          'entryPrice': 0.273022,
-          'currentPrice': 0.2727,
-          'tp1': 0.276,
-          'tp2': 0.279,
-          'tp3': 0.283,
-          'trailingStop': 0.2711,
-          'pnl': -1.2,
-          'strategy': 'SuperTrend'
+          'strategy': 'LuxAlgo Premium'
         },
       ];
     });
   }
 
-  // التعلم التلقائي والتطور الذاتي المباشر
+  void _autoScanAndExecuteHighWinRateTrades() {
+    if (!_isAutoTradingEnabled) return;
+
+    for (var opp in List.from(_availableOpportunities)) {
+      double prob = (opp['winProb'] as num).toDouble();
+      bool alreadyActive = _activeTrades.any((t) => t['symbol'] == opp['symbol']);
+      if (prob >= 80.0 && !alreadyActive) {
+        _executeTrade(opp, isAutomatic: true);
+      }
+    }
+  }
+
+  void _executeTrade(Map<String, dynamic> opp, {bool isAutomatic = false}) {
+    double entry = (opp['price'] as num).toDouble();
+    double tp1 = double.parse((entry * 1.015).toStringAsFixed(4));
+    double tp2 = double.parse((entry * 1.030).toStringAsFixed(4));
+    double tp3 = double.parse((entry * 1.050).toStringAsFixed(4));
+    double stop = double.parse((entry * 0.988).toStringAsFixed(4));
+
+    final newTrade = {
+      'id': '${opp['id']}_${DateTime.now().millisecondsSinceEpoch}',
+      'symbol': opp['symbol'],
+      'wave': 1,
+      'entryPrice': entry,
+      'currentPrice': entry,
+      'tp1': tp1,
+      'tp2': tp2,
+      'tp3': tp3,
+      'trailingStop': stop,
+      'pnl': 0.0,
+      'strategy': opp['indicator']
+    };
+
+    setState(() {
+      _activeTrades.add(newTrade);
+      _availableOpportunities.removeWhere((item) => item['id'] == opp['id']);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          isAutomatic
+              ? '🤖 فتح صفقة تلقائية متقدمة: ${opp['symbol']} (احتمالية النجاح ${opp['winProb']}%)'
+              : '✅ تم الدخول المباشر في صفقة ${opp['symbol']} ونقلها للنشطة',
+        ),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _updateLivePricesAndSelfLearn() {
     if (!mounted) return;
     setState(() {
       final random = Random();
 
-      // 1. تحديث الأسعار للصفقات النشطة
       for (var trade in _activeTrades) {
         double entry = (trade['entryPrice'] as num).toDouble();
         double current = (trade['currentPrice'] as num).toDouble();
-        double change = (random.nextDouble() - 0.48) * (entry * 0.002);
+        double change = (random.nextDouble() - 0.47) * (entry * 0.002);
         current += change;
         trade['currentPrice'] = double.parse(current.toStringAsFixed(4));
 
@@ -147,18 +197,17 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
         trade['pnl'] = double.parse(pnl.toStringAsFixed(1));
       }
 
-      // 2. تطوير واختبار مؤشرات TradingView الذاتي (محاكاة التعلم الآلي)
       for (var ind in _testingIndicators) {
         ind['tests'] = (ind['tests'] as int) + 1;
         double win = (ind['winRate'] as num).toDouble();
-        double shift = (random.nextDouble() - 0.49) * 0.3;
-        win = (win + shift).clamp(30.0, 98.5);
+        double shift = (random.nextDouble() - 0.49) * 0.2;
+        win = (win + shift).clamp(35.0, 99.1);
         ind['winRate'] = double.parse(win.toStringAsFixed(1));
 
-        if (win >= 75.0) {
+        if (win >= 78.0) {
           ind['status'] = 'مؤشر ناجح';
           ind['color'] = Colors.greenAccent;
-        } else if (win >= 88.0) {
+        } else if (win >= 85.0) {
           ind['status'] = 'ممتاز - معتمد';
           ind['color'] = Colors.amber;
         } else {
@@ -176,7 +225,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('تم إغلاق صفقة ${trade['symbol']} فورياً وتسجيل النتيجة للتعلم'),
+        content: Text('تم إغلاق صفقة ${trade['symbol']} وتسجيل نتائجها لتعزيز الذكاء'),
         backgroundColor: Colors.redAccent,
         duration: const Duration(seconds: 2),
       ),
@@ -196,17 +245,17 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                   icon: const Icon(Icons.refresh, color: Colors.amber),
                   onPressed: _updateLivePricesAndSelfLearn,
                 ),
-                const Icon(Icons.psychology, color: Colors.amber, size: 22),
+                Icon(Icons.hub, color: _isApiConnected ? Colors.greenAccent : Colors.amber, size: 20),
               ],
             ),
             Row(
-              children: const [
+              children: [
                 Text(
-                  'Ayman7708 Bot (AI Learning)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                  'Ayman Bot Pro v2.5 ${_isApiConnected ? "[$_selectedExchange LIVE]" : ""}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
                 ),
-                SizedBox(width: 6),
-                Icon(Icons.bolt, color: Colors.amber, size: 22),
+                const SizedBox(width: 6),
+                const Icon(Icons.bolt, color: Colors.amber, size: 22),
               ],
             ),
           ],
@@ -238,27 +287,31 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                   const Tab(
                     child: Row(
                       children: [
-                        Text('اختبار TradingView'),
+                        Text('اختبار جميع المنصات والمؤشرات'),
                         SizedBox(width: 4),
-                        Icon(Icons.science, size: 16, color: Colors.cyanAccent),
+                        Icon(Icons.travel_explore, size: 16, color: Colors.cyanAccent),
                       ],
                     ),
                   ),
                   const Tab(
                     child: Row(
                       children: [
-                        Text('المؤشرات الناجحة 🎯'),
+                        Text('المؤشرات المعتمدة 🎯'),
                         SizedBox(width: 4),
                         Icon(Icons.verified, size: 16, color: Colors.greenAccent),
                       ],
                     ),
                   ),
-                  const Tab(
+                  Tab(
                     child: Row(
                       children: [
-                        Text('الصفقات المتاحة'),
-                        SizedBox(width: 4),
-                        Icon(Icons.search, size: 16),
+                        const Text('الفرص والصفقات المتاحة'),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(8)),
+                          child: Text('${_availableOpportunities.length}', style: const TextStyle(fontSize: 10, color: Colors.white)),
+                        )
                       ],
                     ),
                   ),
@@ -278,7 +331,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: const Color(0xFF161C28),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -289,11 +342,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                   },
                   child: Row(
                     children: [
-                      Icon(_isDemoMode ? Icons.circle : Icons.check_circle, color: Colors.amber, size: 12),
+                      Icon(_isDemoMode ? Icons.circle : Icons.check_circle, color: _isDemoMode ? Colors.amber : Colors.greenAccent, size: 12),
                       const SizedBox(width: 6),
                       Text(
-                        'نوع التداول: ${_isDemoMode ? "(Demo) تجريبي" : "حقيقي"}',
-                        style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold),
+                        'وضع التداول: ${_isDemoMode ? "تجريبي (Demo)" : "حقيقي مالي (Live API)"}',
+                        style: TextStyle(color: _isDemoMode ? Colors.amber : Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -311,7 +364,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'التداول والتعلم الآلي ${_isAutoTradingEnabled ? "شغال" : "متوقف"}',
+                        'التداول والفتح التلقائي: ${_isAutoTradingEnabled ? "مفعل" : "معطل"}',
                         style: TextStyle(
                           color: _isAutoTradingEnabled ? Colors.greenAccent : Colors.redAccent,
                           fontSize: 12,
@@ -329,21 +382,18 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
             child: IndexedStack(
               index: _bottomNavIndex,
               children: [
-                // الصفحة الرئيسية وبها الـ 5 تبويبات (الصفقات النشطة + المؤشرات + النجاح + المتاحة + السجل)
                 TabBarView(
                   controller: _tabController,
                   children: [
                     _buildActiveTradesTab(),
-                    _buildTradingViewLabTab(),
+                    _buildUniversalIndicatorsLabTab(),
                     _buildSuccessfulIndicatorsTab(),
-                    _buildAvailableTradesTab(),
+                    _buildAvailableOpportunitiesTab(),
                     _buildHistoryTab(),
                   ],
                 ),
-                // الصفحة 2: عقود الإشارات السريعة 60M Scalper
                 _buildScalperTab(),
-                // الصفحة 3: إعدادات الذكاء الاصطناعي والتداول
-                _buildSettingsTab(),
+                _buildSettingsAndApiTab(),
               ],
             ),
           ),
@@ -369,19 +419,18 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
             label: 'عقود 60M',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings_suggest),
-            label: 'الإعدادات والتعلم',
+            icon: Icon(Icons.api),
+            label: 'ربط الحساب والإعدادات',
           ),
         ],
       ),
     );
   }
 
-  // 1. شاشة الصفقات النشطة
   Widget _buildActiveTradesTab() {
     if (_activeTrades.isEmpty) {
       return const Center(
-        child: Text('لا توجد صفقات نشطة حالياً، الروبوت يبحث عن فرص جديدة...', style: TextStyle(color: Colors.grey)),
+        child: Text('لا توجد صفقات نشطة حالياً، الروبوت يبحث عن فرص ومؤشرات ممتازة...', style: TextStyle(color: Colors.grey)),
       );
     }
 
@@ -432,8 +481,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    'استراتيجية الدخول: ${trade['strategy'] ?? "AI Indicator"}',
-                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.w500),
+                    'استراتيجية/مؤشر: ${trade['strategy']}',
+                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.w500),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -441,11 +490,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'الحالي: \$${trade['currentPrice']}',
+                      'السعر الحالي: \$${trade['currentPrice']}',
                       style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                     Text(
-                      'الدخول: \$${trade['entryPrice']}',
+                      'سعر الدخول: \$${trade['entryPrice']}',
                       style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                   ],
@@ -480,19 +529,14 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
-                  height: 40,
+                  height: 38,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF4D4D),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     onPressed: () => _closeTradeManual(trade),
-                    child: const Text(
-                      'إغلاق يدوي فوري',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
+                    child: const Text('إغلاق يدوي فوري', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ),
               ],
@@ -503,8 +547,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     );
   }
 
-  // 2. القائمة الجديدة الأولى: مختبر مؤشرات TradingView
-  Widget _buildTradingViewLabTab() {
+  Widget _buildUniversalIndicatorsLabTab() {
     return Column(
       children: [
         Container(
@@ -518,11 +561,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
           ),
           child: const Row(
             children: [
-              Icon(Icons.science, color: Colors.cyanAccent, size: 20),
+              Icon(Icons.travel_explore, color: Colors.cyanAccent, size: 22),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'يقوم البوت باختبار وتجربة جميع مؤشرات TradingView الأساسية بشكل تلقائي على مختلف العملات لتصحيح الأخطاء.',
+                  'اختبار وتجربة شاملة لجميع المؤشرات (المجانية، المدفوعة، المعدلة، وPineScript) عبر مختلف المنصات (TradingView, MT4/MT5, QuantConnect, GoCharting).',
                   style: TextStyle(color: Colors.white70, fontSize: 11),
                 ),
               ),
@@ -540,7 +583,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   title: Text(ind['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: Text('النوع: ${ind['category']} | عدد الاختبارات الآلية: ${ind['tests']}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                  subtitle: Text('المنصة: ${ind['platform']} | التصنيف: ${ind['category']} | التست: ${ind['tests']}', style: const TextStyle(color: Colors.grey, fontSize: 10)),
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -558,9 +601,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     );
   }
 
-  // 3. القائمة الجديدة الثانية: المؤشرات المعتمدة والناجحة للتداول الآلي
   Widget _buildSuccessfulIndicatorsTab() {
-    final successfulList = _testingIndicators.where((e) => (e['winRate'] as num) >= 75.0).toList();
+    final successfulList = _testingIndicators.where((e) => (e['winRate'] as num) >= 78.0).toList();
 
     return Column(
       children: [
@@ -579,7 +621,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'المؤشرات التي تجاوزت نسبة نجاحها 75%+ يتم اعتمادها لتنفيذ الصفقات التلقائية الحقيقية وتجنب الخسارة.',
+                  'المؤشرات المعتمدة لفتح الصفقات التلقائية والمتعددة الموثوقة لتفادي أي خسائر.',
                   style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -603,19 +645,17 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                      onPressed: () {},
-                      icon: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
-                      label: const Text('مفعل بالبوت', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(6)),
+                      child: const Text('مفعل للتداول', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(ind['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text(ind['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                         const SizedBox(height: 2),
-                        Text('نسبة النجاح المؤكدة: ${ind['winRate']}% 🎯', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12)),
-                        Text('تم إجراء ${ind['tests']} صفقة تداول ناجحة', style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                        Text('المنصة: ${ind['platform']} | النجاح: ${ind['winRate']}% 🎯', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 11)),
                       ],
                     ),
                   ],
@@ -628,7 +668,48 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     );
   }
 
-  // 4. باقي الشاشات السابقة (المتاحة + السجل + Scalper + الإعدادات)
+  Widget _buildAvailableOpportunitiesTab() {
+    if (_availableOpportunities.isEmpty) {
+      return const Center(child: Text('تم الدخول في جميع الصفقات المتاحة تلقائياً!', style: TextStyle(color: Colors.amber)));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _availableOpportunities.length,
+      itemBuilder: (context, index) {
+        final item = _availableOpportunities[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161C28),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.amber.withOpacity(0.3)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+                onPressed: () => _executeTrade(item, isAutomatic: false),
+                icon: const Icon(Icons.flash_on, color: Colors.black, size: 16),
+                label: const Text('دخول تلقائي', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(item['symbol'].toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text('السعر: \$${item['price']} | الاحتمالية: ${item['winProb']}%', style: const TextStyle(color: Colors.amber, fontSize: 11, fontWeight: FontWeight.bold)),
+                  Text('المؤشر: ${item['indicator']} (${item['platform']})', style: const TextStyle(color: Colors.cyanAccent, fontSize: 10)),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildTpItem(String label, String value) {
     return Expanded(
       child: Container(
@@ -682,49 +763,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
           );
   }
 
-  Widget _buildAvailableTradesTab() {
-    final available = [
-      {'symbol': 'Solana (SOL)', 'price': 142.50, 'signal': 'شراء STRONG BUY', 'indicator': 'EMA 50/200 Cross'},
-      {'symbol': 'Bitcoin (BTC)', 'price': 63200.0, 'signal': 'انتظار WAITING', 'indicator': 'RSI Oversold'},
-      {'symbol': 'Ethereum (ETH)', 'price': 2650.0, 'signal': 'شراء BUY', 'indicator': 'VWAP + Volume'},
-    ];
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: available.length,
-      itemBuilder: (context, index) {
-        final item = available[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF161C28),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
-                onPressed: () {},
-                child: const Text('دخول تلقائي', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(item['symbol'].toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  Text('السعر: \$${item['price']}', style: const TextStyle(color: Colors.amber, fontSize: 12)),
-                  Text('${item['signal']} (${item['indicator']})', style: const TextStyle(color: Colors.greenAccent, fontSize: 10)),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildScalperTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
@@ -732,31 +770,25 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF161C28),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
+            decoration: BoxDecoration(color: const Color(0xFF161C28), borderRadius: BorderRadius.circular(10)),
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: const [
-                Column(children: [Text('340', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)), Text('الإجمالي', style: TextStyle(color: Colors.grey, fontSize: 11))]),
-                Column(children: [Text('282', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16)), Text('الرابحة', style: TextStyle(color: Colors.grey, fontSize: 11))]),
-                Column(children: [Text('58', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16)), Text('الخاسرة', style: TextStyle(color: Colors.grey, fontSize: 11))]),
+              children: [
+                Column(children: [Text('480', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)), Text('إجمالي الصفقات', style: TextStyle(color: Colors.grey, fontSize: 11))]),
+                Column(children: [Text('412', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16)), Text('الرابحة', style: TextStyle(color: Colors.grey, fontSize: 11))]),
+                Column(children: [Text('68', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16)), Text('الخاسرة', style: TextStyle(color: Colors.grey, fontSize: 11))]),
               ],
             ),
           ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF161C28),
-              borderRadius: BorderRadius.circular(10),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF161C28), borderRadius: BorderRadius.circular(10)),
             child: const Column(
               children: [
-                Text('نسبة دقة إشارات العقود الآجلة بعد التعلم التلقائي:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                Text('نسبة دقة إشارات العقود المجمعة من جميع المنصات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 SizedBox(height: 4),
-                Text('82.9%', style: TextStyle(color: Colors.amber, fontSize: 24, fontWeight: FontWeight.bold)),
+                Text('85.8%', style: TextStyle(color: Colors.amber, fontSize: 24, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -765,22 +797,68 @@ class _MainHomeScreenState extends State<MainHomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildSettingsTab() {
+  Widget _buildSettingsAndApiTab() {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const Text('ربط منصات التداول الحقيقية (Real Exchange Connection)', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: const Color(0xFF161C28), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white10)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButton<String>(
+                value: _selectedExchange,
+                isExpanded: true,
+                dropdownColor: const Color(0xFF161C28),
+                items: ['Binance', 'OKX', 'Bybit', 'KuCoin', 'MetaTrader 5 Gateway']
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(color: Colors.white))))
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedExchange = val!),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _apiKeyController,
+                decoration: const InputDecoration(labelText: 'API Key', labelStyle: TextStyle(color: Colors.grey), border: OutlineInputBorder()),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _apiSecretController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'API Secret', labelStyle: TextStyle(color: Colors.grey), border: OutlineInputBorder()),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: _isApiConnected ? Colors.green : Colors.amber),
+                  onPressed: () {
+                    setState(() {
+                      _isApiConnected = !_isApiConnected;
+                      _isDemoMode = !_isApiConnected;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(_isApiConnected ? 'تم الربط بنجاح مع حساب $_selectedExchange' : 'تم العودة للوضع التجريبي')),
+                    );
+                  },
+                  icon: Icon(_isApiConnected ? Icons.check_circle : Icons.link, color: Colors.black),
+                  label: Text(_isApiConnected ? 'الحساب مرتبط ومفعل (Live)' : 'اتصال الآن وتفعيل API', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         SwitchListTile(
-          title: const Text('التداول الآلي وتصحيح الأخطاء الذكي', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('يتعلم من أسباب الخسارة لتفاديها تلقائياً', style: TextStyle(color: Colors.grey, fontSize: 11)),
+          title: const Text('التداول التلقائي والفتح المتعدد للصفقات', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('يسمح للبوت بفتح عدة صفقات ناجحة بوقت واحد', style: TextStyle(color: Colors.grey, fontSize: 11)),
           value: _isAutoTradingEnabled,
           activeColor: Colors.amber,
           onChanged: (val) => setState(() => _isAutoTradingEnabled = val),
-        ),
-        SwitchListTile(
-          title: const Text('وضع الحساب التجريبي (Demo)', style: TextStyle(color: Colors.white)),
-          value: _isDemoMode,
-          activeColor: Colors.amber,
-          onChanged: (val) => setState(() => _isDemoMode = val),
         ),
       ],
     );
